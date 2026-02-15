@@ -1,6 +1,6 @@
-
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -126,8 +126,13 @@
         }
 
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
 
         .results {
@@ -143,7 +148,7 @@
         }
 
         .metric-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-color: #667eea;
             color: white;
             padding: 25px;
             border-radius: 15px;
@@ -212,11 +217,11 @@
             background: white;
             border-radius: 10px;
             overflow: hidden;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
 
         .batch-results-table th {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-color: #667eea;
             color: white;
             padding: 15px;
             text-align: left;
@@ -283,6 +288,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>🫁 Lung Cancer Segmentation</h1>
@@ -318,7 +324,7 @@
         <!-- Single file results -->
         <div class="results" id="singleResults">
             <h2 style="margin-bottom: 20px; color: #333;">Analysis Results</h2>
-            
+
             <div class="metrics-grid">
                 <div class="metric-card">
                     <div class="metric-value" id="tumorClassification">-</div>
@@ -340,7 +346,7 @@
         <!-- Batch results -->
         <div class="results" id="batchResults">
             <h2 style="margin-bottom: 20px; color: #333;">Batch Analysis Results - Top 10 Tumor Slices</h2>
-            
+
             <div class="batch-summary">
                 <h3>Summary</h3>
                 <div class="batch-summary-item">
@@ -355,6 +361,7 @@
                     <span class="batch-summary-label">Largest Tumor:</span>
                     <span class="batch-summary-value" id="maxTumorSize">-</span>
                 </div>
+                
                 <div class="batch-summary-item">
                     <span class="batch-summary-label">Average Confidence:</span>
                     <span class="batch-summary-value" id="avgConfidence">-</span>
@@ -373,8 +380,8 @@
                         <th>Filename</th>
                         <th>Tumor Size (mm²)</th>
                         <th>Tumor Pixels</th>
+                        <th>Stage</th>
                         <th>Confidence</th>
-                        <th>Tumor %</th>
                     </tr>
                 </thead>
                 <tbody id="topResultsBody">
@@ -427,7 +434,7 @@
 
             const validTypes = ['npy', 'png', 'jpg', 'jpeg', 'zip'];
             const fileExt = file.name.split('.').pop().toLowerCase();
-            
+
             if (!validTypes.includes(fileExt)) {
                 showError('Invalid file type. Please upload .npy, .png, .jpg, .jpeg, or .zip files.');
                 return;
@@ -453,8 +460,8 @@
             formData.append('file', selectedFile);
 
             const isZip = selectedFile.name.toLowerCase().endsWith('.zip');
-            loadingText.textContent = isZip ? 
-                'Processing multiple slices... This may take several minutes.' : 
+            loadingText.textContent = isZip ?
+                'Processing multiple slices... This may take several minutes.' :
                 'Processing image... This may take a few moments.';
 
             loading.style.display = 'block';
@@ -513,24 +520,20 @@
             hideMessages();
         });
 
-        function getTumorClassification(tumorPercentage) {
-            if (tumorPercentage === 0) return 'None';
-            if (tumorPercentage < 1) return 'Minimal';
-            if (tumorPercentage < 5) return 'Small';
-            if (tumorPercentage < 15) return 'Medium';
-            return 'Large';
-        }
+        // Tumor stage is now computed server-side and provided as
+        // `metrics.tumor_stage_label`. We display that instead of
+        // the old percentage-based classification.
 
         function displaySingleResults(data) {
             const metrics = data.metrics;
 
             document.getElementById('tumorClassification').textContent = 
-                getTumorClassification(metrics.tumor_percentage);
-            
-            document.getElementById('confidenceRate').textContent = 
+                (metrics.tumor_stage_label || 'Unknown');
+
+            document.getElementById('confidenceRate').textContent =
                 (metrics.confidence_rate * 100).toFixed(1) + '%';
-            
-            document.getElementById('tumorSize').textContent = 
+
+            document.getElementById('tumorSize').textContent =
                 metrics.tumor_size_mm + ' mm²';
 
             const vizContainer = document.getElementById('singleVisualization');
@@ -549,7 +552,7 @@
             document.getElementById('tumorSlicesCount').textContent = summary.tumor_slices;
             document.getElementById('maxTumorSize').textContent = summary.max_tumor_size + ' mm²';
             document.getElementById('avgConfidence').textContent = (summary.avg_confidence * 100).toFixed(1) + '%';
-            document.getElementById('topSlice').textContent = 
+            document.getElementById('topSlice').textContent =
                 `#${summary.top_slice_index} (${summary.top_slice_filename})`;
 
             // Update table
@@ -564,8 +567,8 @@
                     <td>${result.filename}</td>
                     <td>${result.tumor_size_mm} mm²</td>
                     <td>${result.tumor_pixels.toLocaleString()}</td>
+                    <td>${result.stage_label || 'Unknown'}</td>
                     <td>${(result.confidence_rate * 100).toFixed(1)}%</td>
-                    <td>${result.tumor_percentage.toFixed(2)}%</td>
                 `;
             });
 
@@ -595,4 +598,5 @@
         }
     </script>
 </body>
+
 </html>

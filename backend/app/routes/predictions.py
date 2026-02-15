@@ -74,7 +74,8 @@ def predict():
                     'tumor_size_mm': m['tumor_size_mm'],
                     'tumor_pixels': m['tumor_pixels'],
                     'confidence_rate': m['confidence_rate'],
-                    'tumor_percentage': m['tumor_percentage']
+                    'stage': m['tumor_stage'],
+                    'stage_label': m['tumor_stage_label']
                 })
 
             summary = {

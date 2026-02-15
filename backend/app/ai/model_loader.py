@@ -124,29 +124,61 @@ def inference_single_slice(model, img_array, device):
     return pred_mask, confidence
 
 def calculate_metrics_for_slice(pred_mask, confidence, img_shape):
-    """Calculate comprehensive metrics for a single slice"""
+    """Calculate comprehensive metrics for a single slice.
+
+    This now computes an approximate tumor diameter (assuming the tumor
+    area is circular) and assigns a TNM-style stage (0-3) based on the
+    diameter thresholds you provided. Stage IV cannot be determined
+    from a single-slice area estimate and therefore is not assigned
+    automatically.
+    """
     binary_mask = (pred_mask > 0.5).astype(np.float32)
-    tumor_pixels = np.sum(binary_mask)
-    total_pixels = binary_mask.size
-    tumor_percentage = (tumor_pixels / total_pixels) * 100
-    
+    tumor_pixels = int(np.sum(binary_mask))
+    total_pixels = int(binary_mask.size)
+
     # Confidence rate
     if tumor_pixels > 0:
-        confidence_rate = float(np.mean(confidence[binary_mask > 0]))
+        try:
+            confidence_rate = float(np.mean(confidence[binary_mask > 0]))
+        except Exception:
+            confidence_rate = float(np.mean(confidence))
     else:
         confidence_rate = 0.0
-    
-    # Tumor size in mm²
+
+    # Tumor area in mm² (pixel_spacing default 0.5 mm)
     pixel_spacing = 0.5
-    tumor_size_mm = float(tumor_pixels * (pixel_spacing ** 2))
-    
+    tumor_area_mm2 = float(tumor_pixels * (pixel_spacing ** 2))
+
+
+    # Stage mapping (based on diameter thresholds provided)
+    # Stage 0: T < 10 mm
+    # Stage I: 10 mm ≤ T < 40 mm
+    # Stage II: 40 mm ≤ T < 70 mm
+    # Stage III: T ≥ 70 mm
+    if tumor_area_mm2 <= 0:
+        stage_num = None
+        stage_label = 'Unknown'
+    elif tumor_area_mm2 < 10.0:
+        stage_num = 0
+        stage_label = 'Stage 0 (T < 10 mm)'
+    elif tumor_area_mm2 < 40.0:
+        stage_num = 1
+        stage_label = 'Stage I (10–39 mm)'
+    elif tumor_area_mm2 < 70.0:
+        stage_num = 2
+        stage_label = 'Stage II (40–69 mm)'
+    else:
+        stage_num = 3
+        stage_label = 'Stage III (T ≥ 70 mm)'
+
     return {
-        'tumor_pixels': int(tumor_pixels),
-        'total_pixels': int(total_pixels),
-        'tumor_percentage': float(tumor_percentage),
+        'tumor_pixels': tumor_pixels,
+        'total_pixels': total_pixels,
         'has_tumor': bool(tumor_pixels > 0),
         'confidence_rate': float(confidence_rate),
-        'tumor_size_mm': round(tumor_size_mm, 2)
+        'tumor_size_mm': round(tumor_area_mm2, 2),
+        'tumor_stage': stage_num,
+        'tumor_stage_label': stage_label
     }
 
 def process_multiple_slices(slice_files_dict, device, top_k=10):
