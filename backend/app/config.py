@@ -21,7 +21,7 @@ class Config:
     
     # File upload settings
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
-    MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50 MB max file size
+    MAX_CONTENT_LENGTH = 500 * 1024 * 1024  # 500 MB max file size (allow batch zips)
     ALLOWED_EXTENSIONS = {'dcm', 'dicom'}
     
     # AI Model settings

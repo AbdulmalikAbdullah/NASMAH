@@ -1,0 +1,598 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lung Cancer Segmentation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 1400px;
+            width: 100%;
+            padding: 40px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 60px 20px;
+            text-align: center;
+            background: #f8f9ff;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            margin-bottom: 30px;
+        }
+
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f0f2ff;
+        }
+
+        .upload-area.dragover {
+            border-color: #764ba2;
+            background: #e8ebff;
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 3em;
+            margin-bottom: 20px;
+        }
+
+        .upload-text {
+            font-size: 1.2em;
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .upload-hint {
+            font-size: 0.9em;
+            color: #999;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.1em;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-block;
+            margin: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 30px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .results {
+            display: none;
+            margin-top: 30px;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .metric-value {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .metric-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .visualization {
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            margin-top: 20px;
+        }
+
+        .visualization img {
+            width: 100%;
+            display: block;
+        }
+
+        .error {
+            background: #ff4444;
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .success {
+            background: #00C851;
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .file-info {
+            background: #f8f9ff;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .file-name {
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .batch-results-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .batch-results-table th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        .batch-results-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .batch-results-table tr:hover {
+            background: #f8f9ff;
+        }
+
+        .batch-summary {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+
+        .batch-summary h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .batch-summary-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .batch-summary-item:last-child {
+            border-bottom: none;
+        }
+
+        .batch-summary-label {
+            color: #666;
+        }
+
+        .batch-summary-value {
+            font-weight: bold;
+            color: #333;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 1.8em;
+            }
+
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .batch-results-table {
+                font-size: 0.9em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🫁 Lung Cancer Segmentation</h1>
+        <p class="subtitle">AI-Powered Medical Image Analysis - Single or Batch Processing</p>
+
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📁</div>
+            <div class="upload-text">Click to upload or drag and drop</div>
+            <div class="upload-hint">
+                Single: .npy, .png, .jpg, .jpeg (max 16MB)<br>
+                Batch: .zip with multiple .npy files (max 500MB)
+            </div>
+            <input type="file" id="fileInput" accept=".npy,.png,.jpg,.jpeg,.zip">
+        </div>
+
+        <div class="file-info" id="fileInfo">
+            <strong>Selected file:</strong> <span class="file-name" id="fileName"></span>
+        </div>
+
+        <div style="text-align: center;">
+            <button class="btn" id="predictBtn" disabled>Analyze Image(s)</button>
+            <button class="btn" id="resetBtn" style="display: none;">Upload New File</button>
+        </div>
+
+        <div class="error" id="errorMsg"></div>
+        <div class="success" id="successMsg"></div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p id="loadingText">Processing image... This may take a few moments.</p>
+        </div>
+
+        <!-- Single file results -->
+        <div class="results" id="singleResults">
+            <h2 style="margin-bottom: 20px; color: #333;">Analysis Results</h2>
+            
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-value" id="tumorClassification">-</div>
+                    <div class="metric-label">Tumor Classification</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="confidenceRate">-</div>
+                    <div class="metric-label">Confidence Rate</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="tumorSize">-</div>
+                    <div class="metric-label">Tumor Size</div>
+                </div>
+            </div>
+
+            <div class="visualization" id="singleVisualization"></div>
+        </div>
+
+        <!-- Batch results -->
+        <div class="results" id="batchResults">
+            <h2 style="margin-bottom: 20px; color: #333;">Batch Analysis Results - Top 10 Tumor Slices</h2>
+            
+            <div class="batch-summary">
+                <h3>Summary</h3>
+                <div class="batch-summary-item">
+                    <span class="batch-summary-label">Total Slices Processed:</span>
+                    <span class="batch-summary-value" id="totalSlices">-</span>
+                </div>
+                <div class="batch-summary-item">
+                    <span class="batch-summary-label">Slices with Tumors:</span>
+                    <span class="batch-summary-value" id="tumorSlicesCount">-</span>
+                </div>
+                <div class="batch-summary-item">
+                    <span class="batch-summary-label">Largest Tumor:</span>
+                    <span class="batch-summary-value" id="maxTumorSize">-</span>
+                </div>
+                <div class="batch-summary-item">
+                    <span class="batch-summary-label">Average Confidence:</span>
+                    <span class="batch-summary-value" id="avgConfidence">-</span>
+                </div>
+                <div class="batch-summary-item">
+                    <span class="batch-summary-label">Top Slice:</span>
+                    <span class="batch-summary-value" id="topSlice">-</span>
+                </div>
+            </div>
+
+            <table class="batch-results-table" id="topResultsTable">
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Slice Index</th>
+                        <th>Filename</th>
+                        <th>Tumor Size (mm²)</th>
+                        <th>Tumor Pixels</th>
+                        <th>Confidence</th>
+                        <th>Tumor %</th>
+                    </tr>
+                </thead>
+                <tbody id="topResultsBody">
+                </tbody>
+            </table>
+
+            <div class="visualization" id="batchVisualization"></div>
+        </div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const predictBtn = document.getElementById('predictBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const loading = document.getElementById('loading');
+        const loadingText = document.getElementById('loadingText');
+        const singleResults = document.getElementById('singleResults');
+        const batchResults = document.getElementById('batchResults');
+        const errorMsg = document.getElementById('errorMsg');
+        const successMsg = document.getElementById('successMsg');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+
+        let selectedFile = null;
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', (e) => {
+            handleFile(e.target.files[0]);
+        });
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            handleFile(e.dataTransfer.files[0]);
+        });
+
+        function handleFile(file) {
+            if (!file) return;
+
+            const validTypes = ['npy', 'png', 'jpg', 'jpeg', 'zip'];
+            const fileExt = file.name.split('.').pop().toLowerCase();
+            
+            if (!validTypes.includes(fileExt)) {
+                showError('Invalid file type. Please upload .npy, .png, .jpg, .jpeg, or .zip files.');
+                return;
+            }
+
+            const maxSize = fileExt === 'zip' ? 500 * 1024 * 1024 : 16 * 1024 * 1024;
+            if (file.size > maxSize) {
+                showError(`File too large. Maximum size is ${fileExt === 'zip' ? '500MB' : '16MB'}.`);
+                return;
+            }
+
+            selectedFile = file;
+            fileName.textContent = file.name;
+            fileInfo.style.display = 'block';
+            predictBtn.disabled = false;
+            hideMessages();
+        }
+
+        predictBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            const isZip = selectedFile.name.toLowerCase().endsWith('.zip');
+            loadingText.textContent = isZip ? 
+                'Processing multiple slices... This may take several minutes.' : 
+                'Processing image... This may take a few moments.';
+
+            loading.style.display = 'block';
+            singleResults.style.display = 'none';
+            batchResults.style.display = 'none';
+            hideMessages();
+            predictBtn.disabled = true;
+
+            try {
+                const response = await fetch('/api/predict', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                // Safely handle non-JSON error responses (e.g., 413 HTML error page)
+                let data;
+                const contentType = response.headers.get('content-type') || '';
+                if (contentType.includes('application/json')) {
+                    data = await response.json();
+                } else {
+                    const text = await response.text();
+                    throw new Error(text || 'Prediction failed');
+                }
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Prediction failed');
+                }
+
+                if (data.batch_mode) {
+                    displayBatchResults(data);
+                } else {
+                    displaySingleResults(data);
+                }
+
+                showSuccess('Analysis completed successfully!');
+                resetBtn.style.display = 'inline-block';
+                predictBtn.style.display = 'none';
+
+            } catch (error) {
+                showError(`Error: ${error.message}`);
+                predictBtn.disabled = false;
+            } finally {
+                loading.style.display = 'none';
+            }
+        });
+
+        resetBtn.addEventListener('click', () => {
+            selectedFile = null;
+            fileInput.value = '';
+            fileInfo.style.display = 'none';
+            singleResults.style.display = 'none';
+            batchResults.style.display = 'none';
+            resetBtn.style.display = 'none';
+            predictBtn.style.display = 'inline-block';
+            predictBtn.disabled = true;
+            hideMessages();
+        });
+
+        function getTumorClassification(tumorPercentage) {
+            if (tumorPercentage === 0) return 'None';
+            if (tumorPercentage < 1) return 'Minimal';
+            if (tumorPercentage < 5) return 'Small';
+            if (tumorPercentage < 15) return 'Medium';
+            return 'Large';
+        }
+
+        function displaySingleResults(data) {
+            const metrics = data.metrics;
+
+            document.getElementById('tumorClassification').textContent = 
+                getTumorClassification(metrics.tumor_percentage);
+            
+            document.getElementById('confidenceRate').textContent = 
+                (metrics.confidence_rate * 100).toFixed(1) + '%';
+            
+            document.getElementById('tumorSize').textContent = 
+                metrics.tumor_size_mm + ' mm²';
+
+            const vizContainer = document.getElementById('singleVisualization');
+            vizContainer.innerHTML = `<img src="data:image/png;base64,${data.visualization}" alt="Segmentation Results">`;
+
+            singleResults.style.display = 'block';
+            singleResults.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function displayBatchResults(data) {
+            const summary = data.summary;
+            const topResults = data.top_results;
+
+            // Update summary
+            document.getElementById('totalSlices').textContent = summary.total_slices;
+            document.getElementById('tumorSlicesCount').textContent = summary.tumor_slices;
+            document.getElementById('maxTumorSize').textContent = summary.max_tumor_size + ' mm²';
+            document.getElementById('avgConfidence').textContent = (summary.avg_confidence * 100).toFixed(1) + '%';
+            document.getElementById('topSlice').textContent = 
+                `#${summary.top_slice_index} (${summary.top_slice_filename})`;
+
+            // Update table
+            const tbody = document.getElementById('topResultsBody');
+            tbody.innerHTML = '';
+
+            topResults.forEach((result, index) => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td><strong>${index + 1}</strong></td>
+                    <td>${result.slice_index}</td>
+                    <td>${result.filename}</td>
+                    <td>${result.tumor_size_mm} mm²</td>
+                    <td>${result.tumor_pixels.toLocaleString()}</td>
+                    <td>${(result.confidence_rate * 100).toFixed(1)}%</td>
+                    <td>${result.tumor_percentage.toFixed(2)}%</td>
+                `;
+            });
+
+            // Update visualization
+            const vizContainer = document.getElementById('batchVisualization');
+            vizContainer.innerHTML = `<img src="data:image/png;base64,${data.visualization}" alt="Top 10 Tumor Slices">`;
+
+            batchResults.style.display = 'block';
+            batchResults.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function showError(message) {
+            errorMsg.textContent = message;
+            errorMsg.style.display = 'block';
+            successMsg.style.display = 'none';
+        }
+
+        function showSuccess(message) {
+            successMsg.textContent = message;
+            successMsg.style.display = 'block';
+            errorMsg.style.display = 'none';
+        }
+
+        function hideMessages() {
+            errorMsg.style.display = 'none';
+            successMsg.style.display = 'none';
+        }
+    </script>
+</body>
+</html>

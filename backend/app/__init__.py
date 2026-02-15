@@ -11,7 +11,9 @@ def create_app(config_class=Config):
     app_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     instance_path = os.path.join(app_root, 'instance')
     
-    app = Flask(__name__, instance_path=instance_path)
+    # Serve the project-level templates folder (parent of backend)
+    templates_path = os.path.abspath(os.path.join(app_root, '..', 'templates'))
+    app = Flask(__name__, instance_path=instance_path, template_folder=templates_path)
     app.config.from_object(config_class)
     
     # Ensure required directories exist
@@ -51,5 +53,18 @@ def create_app(config_class=Config):
     @app.route('/health')
     def health_check():
         return {'status': 'healthy', 'service': 'Lung Cancer AI Backend'}, 200
+
+
+
+    """ This is do by (Abdulmalik) do not remove it this is for me to test the model predictions and API """ 
+
+    # try:
+    #     from flask import render_template
+
+    #     @app.route('/')
+    #     def index():
+    #         return render_template('index.html')
+    # except Exception:
+    #     pass
     
     return app
