@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 import os
 import shutil
+import tempfile
 from app.ai.model_loader import (
     model,
     device,
@@ -11,6 +12,9 @@ from app.ai.model_loader import (
     extract_zip,
     create_batch_visualization,
 )
+from app.models import TumorImage, Prediction
+from app.extensions import db
+from app.utils.decorators import token_required
 
 predictions_bp = Blueprint("predictions", __name__)
 bp = predictions_bp
@@ -144,3 +148,174 @@ def predict():
     finally:
         if os.path.exists(filepath):
             os.remove(filepath)
+
+
+@predictions_bp.route("/api/predictions/predict", methods=["POST"])
+@token_required
+def predict_from_image_id(current_user):
+    """
+    Predict cancer stage from an uploaded image using image_id
+    Expected JSON body: { "image_id": <int> }
+    """
+    data = request.get_json()
+    
+    if not data or 'image_id' not in data:
+        return jsonify({"error": "image_id is required"}), 400
+    
+    image_id = data['image_id']
+    
+    # Get image from database
+    image = TumorImage.query.filter_by(
+        image_id=image_id,
+        user_id=current_user.user_id
+    ).first()
+    
+    if not image:
+        return jsonify({"error": "Image not found"}), 404
+    
+    if not image.is_valid:
+        return jsonify({"error": "Image is not valid for prediction"}), 400
+    
+    filepath = image.image_path
+    
+    if not os.path.exists(filepath):
+        return jsonify({"error": "Image file not found on server"}), 404
+    
+    try:
+        # Handle ZIP batch uploads
+        if filepath.lower().endswith('.zip'):
+            tmpdir = None
+            try:
+                tmpdir = tempfile.mkdtemp(prefix='lung_predict_')
+                slice_files = extract_zip(filepath, tmpdir)
+                
+                if not slice_files:
+                    return jsonify({"error": "No valid image files found inside zip"}), 400
+                
+                top_slices = process_multiple_slices(slice_files, device, top_k=10)
+                
+                if not top_slices:
+                    # No tumors detected
+                    prediction = Prediction(
+                        user_id=current_user.user_id,
+                        image_id=image_id,
+                        cancer_stage='0',
+                        confidence=0.95,
+                        model_name='unet_lung_segmentation'
+                    )
+                    db.session.add(prediction)
+                    db.session.commit()
+                    
+                    return jsonify({
+                        "success": True,
+                        "batch_mode": True,
+                        "prediction": prediction.to_dict(),
+                        "message": "No tumors detected in any slices"
+                    })
+                
+                # Get the slice with the largest tumor
+                largest_tumor_slice = top_slices[0]
+                metrics = largest_tumor_slice['metrics']
+                visualization = create_batch_visualization(top_slices)
+                
+                # Create prediction record using the worst case (largest tumor)
+                cancer_stage = str(metrics.get('tumor_stage', 0))
+                confidence = metrics.get('confidence_rate', 0.0)
+                
+                prediction = Prediction(
+                    user_id=current_user.user_id,
+                    image_id=image_id,
+                    cancer_stage=cancer_stage,
+                    confidence=confidence,
+                    model_name='unet_lung_segmentation'
+                )
+                db.session.add(prediction)
+                db.session.commit()
+                
+                # Build detailed response
+                total_slices = len(slice_files)
+                tumor_slices = len(top_slices)
+                
+                top_results = []
+                for s in top_slices:
+                    m = s['metrics']
+                    top_results.append({
+                        'slice_index': s['slice_index'],
+                        'filename': s['filename'],
+                        'tumor_size_mm': m['tumor_size_mm'],
+                        'tumor_pixels': m['tumor_pixels'],
+                        'confidence_rate': m['confidence_rate'],
+                        'stage': m['tumor_stage'],
+                        'stage_label': m['tumor_stage_label']
+                    })
+                
+                return jsonify({
+                    "success": True,
+                    "batch_mode": True,
+                    "prediction": prediction.to_dict(),
+                    "summary": {
+                        'total_slices': total_slices,
+                        'tumor_slices': tumor_slices,
+                        'max_tumor_size': metrics['tumor_size_mm'],
+                        'avg_confidence': confidence,
+                    },
+                    'top_results': top_results,
+                    'visualization': visualization
+                })
+                
+            finally:
+                # Cleanup temp directory
+                if tmpdir and os.path.exists(tmpdir):
+                    try:
+                        shutil.rmtree(tmpdir)
+                    except Exception:
+                        pass
+        
+        # Single file handling (npy, png, jpg, jpeg)
+        img_array = load_image_file(filepath)
+        pred_mask, confidence_map = inference_single_slice(model, img_array, device)
+        metrics = calculate_metrics_for_slice(pred_mask, confidence_map, img_array.shape)
+        
+        # Create visualization
+        visualization = None
+        try:
+            visualization = create_batch_visualization([
+                {
+                    'slice_index': 0,
+                    'filename': os.path.basename(filepath),
+                    'image': img_array,
+                    'pred_mask': pred_mask,
+                    'confidence': confidence_map,
+                    'metrics': metrics
+                }
+            ])
+        except Exception as e:
+            print(f"Warning: Could not create visualization: {e}")
+        
+        # Save prediction to database
+        cancer_stage = str(metrics.get('tumor_stage', 0))
+        confidence = metrics.get('confidence_rate', 0.0)
+        
+        prediction = Prediction(
+            user_id=current_user.user_id,
+            image_id=image_id,
+            cancer_stage=cancer_stage,
+            confidence=confidence,
+            model_name='unet_lung_segmentation'
+        )
+        
+        db.session.add(prediction)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "batch_mode": False,
+            "prediction": prediction.to_dict(),
+            "metrics": metrics,
+            "visualization": visualization
+        })
+        
+    except Exception as e:
+        print(f"Error during prediction: {str(e)}")
+        return jsonify({"error": f"Prediction failed: {str(e)}"}), 500
+

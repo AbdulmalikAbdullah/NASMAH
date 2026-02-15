@@ -1,7 +1,10 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from app.models import TumorImage, User
 from app.extensions import db
 from app.utils.decorators import token_required
+from app.services.image_service import ImageService
+import os
+from werkzeug.utils import secure_filename
 
 bp = Blueprint('images', __name__, url_prefix='/api/images')
 
@@ -26,7 +29,7 @@ def get_images(current_user):
 @bp.route('/upload', methods=['POST'])
 @token_required
 def upload_image(current_user):
-    """Upload a tumor image (DICOM)"""
+    """Upload a medical image file"""
     try:
         # Check if file is in request
         if 'file' not in request.files:
@@ -37,11 +40,12 @@ def upload_image(current_user):
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
         
-        # Validate file type
-        allowed_extensions = {'dcm', 'dicom'}
-        file_ext = file.filename.lower().split('.')[-1]
+        # Validate file type using config
+        allowed_extensions = current_app.config.get('ALLOWED_EXTENSIONS', {'npy', 'png', 'jpg', 'jpeg', 'zip', 'dcm', 'dicom'})
+        file_ext = file.filename.lower().rsplit('.', 1)[-1]
+        
         if file_ext not in allowed_extensions:
-            return jsonify({'error': f'Only DICOM files (.dcm, .dicom) are allowed. Got .{file_ext}'}), 400
+            return jsonify({'error': f'File type .{file_ext} not allowed. Supported: {", ".join(sorted(allowed_extensions))}'}), 400
         
         # Get file size
         file.seek(0, 2)  # Seek to end
@@ -49,17 +53,41 @@ def upload_image(current_user):
         file_size_mb = file_size_bytes / (1024 * 1024)
         file.seek(0)  # Seek back to start
         
-        # Validate file size (max 50MB)
-        max_size_mb = 50
+        # Validate file size (max from config or 500MB)
+        max_size_bytes = current_app.config.get('MAX_CONTENT_LENGTH', 500 * 1024 * 1024)
+        max_size_mb = max_size_bytes / (1024 * 1024)
+        
         if file_size_mb > max_size_mb:
-            return jsonify({'error': f'File size ({file_size_mb:.2f}MB) exceeds maximum ({max_size_mb}MB)'}), 413
+            return jsonify({'error': f'File size ({file_size_mb:.2f}MB) exceeds maximum ({max_size_mb:.0f}MB)'}), 413
+        
+        # Create user upload directory
+        upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
+        user_upload_dir = os.path.join(upload_folder, str(current_user.user_id))
+        os.makedirs(user_upload_dir, exist_ok=True)
+        
+        # Secure filename and save file
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(user_upload_dir, filename)
+        
+        # Save file to disk
+        file.save(file_path)
+        
+        # Calculate file hash for duplicate detection
+        file_hash = ImageService.calculate_file_hash(file_path)
+        
+        # Check for duplicate
+        existing_image = TumorImage.query.filter_by(file_hash=file_hash).first()
+        if existing_image:
+            os.remove(file_path)  # Remove duplicate
+            return jsonify({'error': 'This file has already been uploaded', 'image_id': existing_image.image_id}), 409
         
         # Create database entry
         image = TumorImage(
             user_id=current_user.user_id,
-            image_path=f'uploads/{current_user.user_id}/{file.filename}',
+            image_path=file_path,
             file_extension=file_ext,
             file_size_mb=round(file_size_mb, 2),
+            file_hash=file_hash,
             is_valid=True
         )
         
@@ -68,8 +96,10 @@ def upload_image(current_user):
         
         return jsonify({
             'message': 'Image uploaded successfully',
+            'image_id': image.image_id,
             'image': image.to_dict()
         }), 201
+        
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Upload failed: {str(e)}'}), 500
