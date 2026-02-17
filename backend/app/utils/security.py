@@ -4,10 +4,21 @@ import secrets
 import jwt
 from datetime import datetime, timedelta
 from flask import current_app
+from werkzeug.security import generate_password_hash, check_password_hash
 
 
 class SecurityUtils:
     """Security-related utility functions"""
+    
+    @staticmethod
+    def hash_password(password):
+        """Hash a password"""
+        return generate_password_hash(password)
+    
+    @staticmethod
+    def verify_password(password, password_hash):
+        """Verify a password against its hash"""
+        return check_password_hash(password_hash, password)
     
     @staticmethod
     def generate_token(length=32):

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Input from '../components/common/Input';
 import Button from '../components/common/Button';
+import toast from 'react-hot-toast';
 
 /**
  * Register Page Component
@@ -104,12 +105,15 @@ const Register = () => {
       const result = await register(formData.firstName, formData.lastName, formData.email, formData.password);
       
       if (result.success) {
-        navigate('/dashboard');
+        toast.success('Registration successful! Please login.');
+        navigate('/login');
       } else {
         setErrors({ general: result.error || 'Registration failed. Please try again.' });
+        toast.error(result.error || 'Registration failed.');
       }
     } catch (err) {
       setErrors({ general: 'An unexpected error occurred. Please try again.' });
+      toast.error('An unexpected error occurred.');
     } finally {
       setLoading(false);
     }

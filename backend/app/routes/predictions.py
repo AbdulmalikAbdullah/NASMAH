@@ -319,3 +319,47 @@ def predict_from_image_id(current_user):
         print(f"Error during prediction: {str(e)}")
         return jsonify({"error": f"Prediction failed: {str(e)}"}), 500
 
+
+@predictions_bp.route("/api/predictions/history", methods=["GET"])
+@token_required
+def get_prediction_history(current_user):
+    """Get all predictions for the current user"""
+    try:
+        # Query predictions for current user with image information
+        predictions = Prediction.query.filter_by(user_id=current_user.user_id).order_by(Prediction.created_at.desc()).all()
+        
+        results = []
+        for pred in predictions:
+            # Get associated image
+            image = TumorImage.query.filter_by(image_id=pred.image_id).first()
+            
+            # Map cancer stage to prediction label
+            stage_labels = {
+                '0': 'Negative',
+                '1': 'Stage I',
+                '2': 'Stage II',
+                '3': 'Stage III'
+            }
+            
+            results.append({
+                'prediction_id': pred.prediction_id,
+                'image_id': pred.image_id,
+                'image_name': os.path.basename(image.image_path) if image else 'Unknown',
+                'image_url': image.image_path if image else None,
+                'timestamp': pred.created_at.isoformat() if pred.created_at else None,
+                'prediction_label': stage_labels.get(pred.cancer_stage, 'Unknown'),
+                'cancer_stage': pred.cancer_stage,
+                'confidence': round(pred.confidence * 100, 2),
+                'model_name': pred.model_name
+            })
+        
+        return jsonify({
+            'message': 'Prediction history retrieved successfully',
+            'count': len(results),
+            'predictions': results
+        }), 200
+        
+    except Exception as e:
+        print(f"Error retrieving prediction history: {str(e)}")
+        return jsonify({'error': f'Failed to retrieve history: {str(e)}'}), 500
+

@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from app.models import User, UserSession
 from app.extensions import db
 from app.services.auth_service import AuthService
+from app.services.logging_service import LoggingService
 from app.utils.validators import Validators, validate_request_data
 from app.utils.security import SecurityUtils
 import uuid
@@ -55,6 +56,12 @@ def register():
             role=data.get('role', 'PATIENT')
         )
         
+        # Log the registration action
+        LoggingService.log_action(
+            action=f"User Registered: {user.email}",
+            user_id=user.user_id
+        )
+        
         return jsonify({
             'message': 'User registered successfully',
             'user': user.to_dict()
@@ -96,6 +103,12 @@ def login():
             expires_in_hours=1
         )
         
+        # Log the login action
+        LoggingService.log_action(
+            action=f"User Login: {user.email}",
+            user_id=user.user_id
+        )
+        
         return jsonify({
             'message': 'Login successful',
             'access_token': access_token,
@@ -125,10 +138,23 @@ def logout():
         
         token = auth_header[7:]  # Remove 'Bearer ' prefix
         
+        # Decode token to get user_id for logging
+        payload, error = SecurityUtils.decode_jwt(token)
+        user_id = payload.get('user_id') if payload else None
+        
         # Revoke session
         success = AuthService.revoke_session(token)
         if not success:
             return jsonify({'error': 'Session not found'}), 404
+        
+        # Log the logout action
+        if user_id:
+            user = User.query.get(user_id)
+            if user:
+                LoggingService.log_action(
+                    action=f"User Logout: {user.email}",
+                    user_id=user_id
+                )
         
         return jsonify({'message': 'Logout successful'}), 200
         
@@ -171,3 +197,156 @@ def refresh():
         
     except Exception as e:
         return jsonify({'error': 'Token refresh failed: ' + str(e)}), 500
+
+
+@bp.route('/me', methods=['GET'])
+def get_current_user():
+    """Get current user profile"""
+    from app.utils.decorators import token_required
+    from functools import wraps
+    
+    # Manual token verification since we can't use decorator directly
+    try:
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'Authorization header missing or invalid'}), 401
+        
+        token = auth_header[7:]
+        payload, error = SecurityUtils.decode_jwt(token)
+        if error:
+            return jsonify({'error': error}), 401
+        
+        user_id = payload.get('user_id')
+        user = User.query.filter_by(user_id=user_id).first()
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        return jsonify({
+            'message': 'User profile retrieved successfully',
+            'user': user.to_dict()
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': 'Failed to retrieve user profile: ' + str(e)}), 500
+
+
+@bp.route('/me', methods=['PUT'])
+def update_current_user():
+    """Update current user profile"""
+    try:
+        # Manual token verification
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'Authorization header missing or invalid'}), 401
+        
+        token = auth_header[7:]
+        payload, error = SecurityUtils.decode_jwt(token)
+        if error:
+            return jsonify({'error': error}), 401
+        
+        user_id = payload.get('user_id')
+        user = User.query.filter_by(user_id=user_id).first()
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        data = request.get_json()
+        
+        # Update allowed fields
+        if 'fname' in data:
+            is_valid, error = Validators.validate_name(data['fname'], 'First name')
+            if not is_valid:
+                return jsonify({'error': error}), 400
+            user.Fname = data['fname']
+        
+        if 'lname' in data:
+            is_valid, error = Validators.validate_name(data['lname'], 'Last name')
+            if not is_valid:
+                return jsonify({'error': error}), 400
+            user.Lname = data['lname']
+        
+        if 'email' in data:
+            is_valid, error = Validators.validate_email(data['email'])
+            if not is_valid:
+                return jsonify({'error': error}), 400
+            
+            # Check if email already exists
+            existing_user = User.query.filter_by(email=data['email']).first()
+            if existing_user and existing_user.user_id != user.user_id:
+                return jsonify({'error': 'Email already in use'}), 409
+            
+            user.email = data['email']
+        
+        db.session.commit()
+        
+        # Log the profile update action
+        LoggingService.log_action(
+            action=f"Profile Updated: {user.email}",
+            user_id=user.user_id
+        )
+        
+        return jsonify({
+            'message': 'Profile updated successfully',
+            'user': user.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to update profile: ' + str(e)}), 500
+
+
+@bp.route('/change-password', methods=['POST'])
+def change_password():
+    """Change user password"""
+    try:
+        # Manual token verification
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'Authorization header missing or invalid'}), 401
+        
+        token = auth_header[7:]
+        payload, error = SecurityUtils.decode_jwt(token)
+        if error:
+            return jsonify({'error': error}), 401
+        
+        user_id = payload.get('user_id')
+        user = User.query.filter_by(user_id=user_id).first()
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        data = request.get_json()
+        
+        # Validate required fields
+        required = ['current_password', 'new_password']
+        is_valid, error = validate_request_data(data, required)
+        if not is_valid:
+            return jsonify({'error': error}), 400
+        
+        # Verify current password
+        if not SecurityUtils.verify_password(data['current_password'], user.password_hash):
+            return jsonify({'error': 'Current password is incorrect'}), 401
+        
+        # Validate new password
+        is_valid, error = Validators.validate_password(data['new_password'])
+        if not is_valid:
+            return jsonify({'error': error}), 400
+        
+        # Update password
+        user.password_hash = SecurityUtils.hash_password(data['new_password'])
+        db.session.commit()
+        
+        # Log the password change action
+        LoggingService.log_action(
+            action=f"Password Changed: {user.email}",
+            user_id=user.user_id
+        )
+        
+        return jsonify({
+            'message': 'Password changed successfully'
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to change password: ' + str(e)}), 500

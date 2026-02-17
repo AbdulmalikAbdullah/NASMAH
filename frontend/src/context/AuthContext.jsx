@@ -54,17 +54,10 @@ export const AuthProvider = ({ children }) => {
         password,
       });
 
-      const { access_token, refresh_token, user: userData } = response.data;
-
-      // Store tokens and user data
-      localStorage.setItem('access_token', access_token);
-      localStorage.setItem('refresh_token', refresh_token);
-      localStorage.setItem('user', JSON.stringify(userData));
-
-      setUser(userData);
-      return { success: true, user: userData };
+      // Do NOT auto-login - just return success
+      return { success: true, message: 'Registration successful. Please login.' };
     } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Registration failed. Please try again.';
+      const errorMessage = error.response?.data?.error || error.response?.data?.message || 'Registration failed. Please try again.';
       return { success: false, error: errorMessage };
     }
   };
@@ -97,6 +90,7 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     user,
+    setUser,
     login,
     register,
     logout,

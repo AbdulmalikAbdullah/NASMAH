@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Input from '../components/common/Input';
 import Button from '../components/common/Button';
+import toast from 'react-hot-toast';
 
 /**
  * Login Page Component
@@ -61,12 +62,15 @@ const Login = () => {
       const result = await login(formData.email, formData.password);
       
       if (result.success) {
+        toast.success('Login successful!');
         navigate('/dashboard');
       } else {
         setError(result.error || 'Login failed. Please check your credentials.');
+        toast.error(result.error || 'Login failed.');
       }
     } catch (err) {
       setError('An unexpected error occurred. Please try again.');
+      toast.error('An unexpected error occurred.');
     } finally {
       setLoading(false);
     }
