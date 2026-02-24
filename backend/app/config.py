@@ -24,9 +24,13 @@ class Config:
     MAX_CONTENT_LENGTH = 500 * 1024 * 1024  # 500 MB max file size (allow batch zips)
     ALLOWED_EXTENSIONS = {'npy', 'png', 'jpg', 'jpeg', 'zip', 'dcm', 'dicom'}
     
-    # AI Model settings
-    MODEL_PATH = os.path.join(BASE_DIR, 'models', 'unet_lung_segmentation.pth')
-    MODEL_NAME = 'unet_lung_segmentation'
+    # AI "OLD" Model settings
+    # MODEL_PATH = os.path.join(BASE_DIR, 'models', 'unet_lung_segmentation.pth')
+    # MODEL_NAME = 'unet_lung_segmentation'
+
+    # AI "NEW" Model settings
+    MODEL_PATH = os.path.join(BASE_DIR, 'models', 'resnet34_lung_segmentation.pth')
+    MODEL_NAME = 'resnet34_lung_segmentation'
     
     # Ensure necessary directories exist
     @staticmethod

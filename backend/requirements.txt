@@ -40,3 +40,5 @@ wheel>=0.38.0
 
 # Visualization and image processing
 matplotlib>=3.7.0
+
+segmentation-models-pytorch>=0.3.0
