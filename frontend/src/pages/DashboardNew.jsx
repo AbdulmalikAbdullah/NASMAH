@@ -84,6 +84,7 @@ const Dashboard = () => {
           { name: 'Stage I', value: stageCount['1'], color: '#FBBF24' },
           { name: 'Stage II', value: stageCount['2'], color: '#F97316' },
           { name: 'Stage III', value: stageCount['3'], color: '#EF4444' },
+          { name: 'Stage IV', value: stageCount['4'], color: '#7F1D1D' },
         ].filter(item => item.value > 0); // Only show non-zero values
         
         // Calculate scan activity by month (last 6 months)
@@ -157,6 +158,7 @@ const Dashboard = () => {
     { name: 'Stage I', value: 15, color: '#FBBF24' },
     { name: 'Stage II', value: 12, color: '#F97316' },
     { name: 'Stage III', value: 8, color: '#EF4444' },
+    { name: 'Stage IV', value: 5, color: '#7F1D1D' },
   ];
 
   if (loading) {

@@ -61,6 +61,11 @@ class TumorImage(db.Model):
     
     is_valid = db.Column(db.Boolean, nullable=False, default=True)
     
+    # AWS S3 Storage fields
+    s3_url = db.Column(db.String(1000), nullable=True)
+    s3_key = db.Column(db.String(500), unique=True, nullable=True, index=True)
+    s3_bucket = db.Column(db.String(255), nullable=True)
+    
     uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationships
@@ -82,6 +87,9 @@ class TumorImage(db.Model):
             'height_mm': self.height_mm,
             'depth_mm': self.depth_mm,
             'is_valid': self.is_valid,
+            's3_url': self.s3_url,
+            's3_key': self.s3_key,
+            's3_bucket': self.s3_bucket,
             'uploaded_at': self.uploaded_at.isoformat() if self.uploaded_at else None
         }
 

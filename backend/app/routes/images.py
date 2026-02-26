@@ -3,10 +3,14 @@ from app.models import TumorImage, User
 from app.extensions import db
 from app.utils.decorators import token_required
 from app.services.image_service import ImageService
+from app.services.s3_service import get_s3_service
 import os
 from werkzeug.utils import secure_filename
 
 bp = Blueprint('images', __name__, url_prefix='/api/images')
+
+# Initialize S3 service
+s3_service = get_s3_service()
 
 
 @bp.route('/', methods=['GET'])
@@ -94,6 +98,31 @@ def upload_image(current_user):
         db.session.add(image)
         db.session.commit()
         
+        # Upload standard image files to S3 (not ZIP files)
+        if file_ext in ['png', 'jpg', 'jpeg', 'dcm', 'dicom'] and s3_service.is_configured():
+            try:
+                # Reopen file for S3 upload
+                with open(file_path, 'rb') as f:
+                    s3_result = s3_service.upload_file_to_s3(
+                        f,
+                        current_user.user_id,
+                        filename,
+                        content_type=f'image/{file_ext}'
+                    )
+                    
+                    if s3_result['success']:
+                        image.s3_url = s3_result['s3_url']
+                        image.s3_key = s3_result['s3_key']
+                        image.s3_bucket = s3_result['s3_bucket']
+                        db.session.commit()
+                        current_app.logger.info(f"Image uploaded to S3: {s3_result['s3_url']}")
+                    else:
+                        current_app.logger.warning(f"S3 upload failed: {s3_result.get('error')}")
+            except Exception as e:
+                current_app.logger.error(f"Error uploading to S3: {str(e)}")
+        elif file_ext == 'zip':
+            current_app.logger.info(f"ZIP file not uploaded to S3, will process locally: {filename}")
+        
         return jsonify({
             'message': 'Image uploaded successfully',
             'image_id': image.image_id,
@@ -127,19 +156,18 @@ def get_image(current_user, image_id):
 @bp.route('/<int:image_id>', methods=['DELETE'])
 @token_required
 def delete_image(current_user, image_id):
-    """Delete an image"""
+    """Delete an image with full-stack cleanup via ImageService"""
     try:
-        # Get image and verify user owns it
-        image = TumorImage.query.filter_by(image_id=image_id, user_id=current_user.user_id).first()
+        # We delegate ALL the hard work to the ImageService!
+        # It securely handles the S3 deletion, the local file, AND the Prediction cascade delete.
+        ImageService.delete_image(image_id, current_user.user_id)
         
-        if not image:
-            return jsonify({'error': 'Image not found or access denied'}), 404
+        return jsonify({'message': 'Image, predictions, and cloud files deleted successfully'}), 200
         
-        # Delete database entry
-        db.session.delete(image)
-        db.session.commit()
+    except ValueError as e:
+        # Catches "Image not found" from the service
+        return jsonify({'error': str(e)}), 404
         
-        return jsonify({'message': 'Image deleted successfully'}), 200
     except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': f'Failed to delete image: {str(e)}'}), 500
+        # Catches any catastrophic database/S3 errors
+        return jsonify({'error': f'Failed to process deletion: {str(e)}'}), 500

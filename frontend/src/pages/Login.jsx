@@ -17,15 +17,20 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, isAdmin } = useAuth();
   const navigate = useNavigate();
 
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated()) {
-      navigate('/dashboard');
+      // Safely route already-logged-in users who visit /login
+      if (isAdmin()) {
+        navigate('/admin/dashboard', { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, isAdmin, navigate]);
 
   // Handle input changes
   const handleChange = (e) => {
@@ -63,7 +68,15 @@ const Login = () => {
       
       if (result.success) {
         toast.success('Login successful!');
-        navigate('/dashboard');
+        
+        // Safe role-based routing with optional chaining and case-insensitive check
+        const userRole = result?.user?.role || result?.role || '';
+        
+        if (userRole.toLowerCase() === 'admin') {
+          navigate('/admin/dashboard', { replace: true });
+        } else {
+          navigate('/dashboard', { replace: true });
+        }
       } else {
         setError(result.error || 'Login failed. Please check your credentials.');
         toast.error(result.error || 'Login failed.');

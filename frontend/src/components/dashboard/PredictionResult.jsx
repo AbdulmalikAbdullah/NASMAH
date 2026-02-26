@@ -52,10 +52,11 @@ const PredictionResult = ({ prediction }) => {
   const getStageLabel = () => {
     if (metrics?.tumor_stage_label) return metrics.tumor_stage_label;
     const labels = {
-      '0': 'Stage 0 (No tumor or < 10mm)',
+      '0': 'Negative (No tumor or < 10mm)',
       '1': 'Stage I (10-39mm)',
       '2': 'Stage II (40-69mm)',
       '3': 'Stage III (≥ 70mm)',
+      '4': 'Stage IV (≥ 70mm)'
     };
     return labels[cancer_stage] || `Stage ${cancer_stage}`;
   };

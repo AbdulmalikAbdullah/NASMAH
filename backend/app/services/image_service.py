@@ -3,8 +3,9 @@
 import os
 import hashlib
 from werkzeug.utils import secure_filename
-from app.models import TumorImage
+from app.models import TumorImage, Prediction
 from app.extensions import db
+from app.services.s3_service import get_s3_service
 from flask import current_app
 
 
@@ -89,18 +90,35 @@ class ImageService:
     
     @staticmethod
     def delete_image(image_id, user_id):
-        """Delete an image"""
+        """Delete an image, its associated predictions, and cloud files"""
         image = TumorImage.query.filter_by(image_id=image_id, user_id=user_id).first()
         
         if not image:
-            raise ValueError('Image not found')
+            raise ValueError('Image not found or access denied')
         
-        # Delete file from filesystem
-        if os.path.exists(image.image_path):
-            os.remove(image.image_path)
-        
-        # Delete database entry
-        db.session.delete(image)
-        db.session.commit()
-        
-        return True
+        try:
+            # 1. CASCADE DELETE: Remove associated predictions first
+            Prediction.query.filter_by(image_id=image_id).delete()
+            
+            # 2. CLOUD DELETION: Remove from AWS S3
+            if image.s3_key:
+                s3_service = get_s3_service()
+                s3_service.delete_file_from_s3(image.s3_key)
+            
+            # 3. LOCAL DELETION: Fallback for older legacy files
+            if image.image_path and os.path.exists(image.image_path):
+                try:
+                    os.remove(image.image_path)
+                except Exception as e:
+                    current_app.logger.warning(f"Could not delete local file {image.image_path}: {e}")
+            
+            # 4. DB DELETION: Remove the parent image record
+            db.session.delete(image)
+            db.session.commit()
+            
+            return True
+            
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Failed to delete image and predictions: {str(e)}")
+            raise ValueError(f"Deletion failed: {str(e)}")

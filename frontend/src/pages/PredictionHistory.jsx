@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import DashboardLayout from '../components/common/DashboardLayout';
 import LoadingSpinner from '../components/common/LoadingSpinner';
+import ScanViewerModal from '../components/common/ScanViewerModal';
 import axiosInstance from '../api/axiosConfig';
 import toast from 'react-hot-toast';
 
@@ -129,6 +130,14 @@ const PredictionHistory = () => {
           >
             Stage III ({predictions.filter(p => p.cancer_stage === '3').length})
           </button>
+          <button
+            onClick={() => setFilter('4')}
+            className={`px-4 py-2 rounded-lg font-medium ${
+              filter === '4' ? 'bg-red-900 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            Stage IV ({predictions.filter(p => p.cancer_stage === '4').length})
+          </button>
         </div>
 
         {/* Predictions List */}
@@ -170,7 +179,9 @@ const PredictionHistory = () => {
                           pred.cancer_stage === '0' ? 'bg-green-100 text-green-800' :
                           pred.cancer_stage === '1' ? 'bg-yellow-100 text-yellow-800' :
                           pred.cancer_stage === '2' ? 'bg-orange-100 text-orange-800' :
-                          'bg-red-100 text-red-800'
+                          pred.cancer_stage === '3' ? 'bg-red-100 text-red-800' :
+                          pred.cancer_stage === '4' ? 'bg-red-900 text-white' :
+                          'bg-gray-100 text-gray-800'
                         }`}>
                           {pred.prediction_label}
                         </span>
@@ -216,81 +227,11 @@ const PredictionHistory = () => {
         )}
 
         {/* Details Modal */}
-        {showModal && selectedPrediction && (
-          <div className="fixed inset-0 z-50 overflow-y-auto">
-            <div className="flex items-center justify-center min-h-screen px-4">
-              <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setShowModal(false)}></div>
-              
-              <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-2xl font-bold text-gray-900">Prediction Details</h3>
-                  <button
-                    onClick={() => setShowModal(false)}
-                    className="text-gray-400 hover:text-gray-600"
-                  >
-                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm font-medium text-gray-500">Image Name</p>
-                      <p className="mt-1 text-sm text-gray-900">{selectedPrediction.image_name}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-500">Date</p>
-                      <p className="mt-1 text-sm text-gray-900">{new Date(selectedPrediction.timestamp).toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-500">Prediction</p>
-                      <p className="mt-1">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          selectedPrediction.cancer_stage === '0' ? 'bg-green-100 text-green-800' :
-                          selectedPrediction.cancer_stage === '1' ? 'bg-yellow-100 text-yellow-800' :
-                          selectedPrediction.cancer_stage === '2' ? 'bg-orange-100 text-orange-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>
-                          {selectedPrediction.prediction_label}
-                        </span>
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-500">Confidence</p>
-                      <p className="mt-1 text-sm text-gray-900">{selectedPrediction.confidence.toFixed(1)}%</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-500">Model</p>
-                      <p className="mt-1 text-sm text-gray-900">{selectedPrediction.model_name}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-500">Image ID</p>
-                      <p className="mt-1 text-sm text-gray-900">#{selectedPrediction.image_id}</p>
-                    </div>
-                  </div>
-
-                  <div className="pt-4 border-t">
-                    <p className="text-sm font-medium text-gray-500 mb-2">AI Segmentation Result</p>
-                    <div className="bg-gray-100 rounded-lg p-4 text-center">
-                      <p className="text-sm text-gray-500">Visualization available in future update</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-6 flex justify-end space-x-3">
-                  <button
-                    onClick={() => setShowModal(false)}
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        <ScanViewerModal 
+          isOpen={showModal}
+          onClose={() => setShowModal(false)}
+          prediction={selectedPrediction}
+        />
       </div>
     </DashboardLayout>
   );

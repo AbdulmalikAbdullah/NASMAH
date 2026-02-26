@@ -99,40 +99,74 @@ def activate_user(current_user, user_id):
 def get_statistics(current_user):
     """Get system statistics (admin only)"""
     try:
-        # Total users
+        from datetime import datetime, timedelta
+        thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+        
+        # ===== USER METRICS =====
         total_users = User.query.count()
         active_users = User.query.filter_by(is_active=True).count()
+        deactivated_users = User.query.filter_by(is_active=False).count()
         admin_users = User.query.filter_by(role='ADMIN').count()
         patient_users = User.query.filter_by(role='PATIENT').count()
         
-        # Total images and predictions
+        # New signups in last 30 days
+        new_signups_30d = User.query.filter(
+            User.created_at >= thirty_days_ago
+        ).count()
+        
+        # ===== IMAGE METRICS =====
         total_images = TumorImage.query.count()
-        total_predictions = Prediction.query.count()
-        
-        # Predictions by stage
-        stage_counts = db.session.query(
-            Prediction.cancer_stage,
-            func.count(Prediction.prediction_id)
-        ).group_by(Prediction.cancer_stage).all()
-        
-        stages_dict = {stage: count for stage, count in stage_counts}
-        
-        # Average confidence
-        avg_confidence = db.session.query(
-            func.avg(Prediction.confidence)
-        ).scalar() or 0.0
-        
-        # Recent activity (last 30 days)
-        from datetime import datetime, timedelta
-        thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+        valid_images = TumorImage.query.filter_by(is_valid=True).count()
         
         recent_images = TumorImage.query.filter(
             TumorImage.uploaded_at >= thirty_days_ago
         ).count()
         
+        # ===== PREDICTION METRICS =====
+        total_predictions = Prediction.query.count()
+        
         recent_predictions = Prediction.query.filter(
             Prediction.created_at >= thirty_days_ago
         ).count()
+        
+        # Predictions by stage - ALWAYS return stages 0-4 (fill zeros for missing)
+        stage_counts = db.session.query(
+            Prediction.cancer_stage,
+            func.count(Prediction.prediction_id)
+        ).group_by(Prediction.cancer_stage).all()
+        
+        stages_dict = {str(stage): count for stage, count in stage_counts}
+        
+        # Ensure all stages 0-4 are present
+        by_stage = {
+            '0': stages_dict.get('0', 0),
+            '1': stages_dict.get('1', 0),
+            '2': stages_dict.get('2', 0),
+            '3': stages_dict.get('3', 0),
+            '4': stages_dict.get('4', 0)
+        }
+        
+        # Average confidence (as percentage)
+        avg_confidence = db.session.query(
+            func.avg(Prediction.confidence)
+        ).scalar() or 0.0
+        avg_confidence_pct = round(float(avg_confidence) * 100, 2)
+        
+        # ===== AI HEALTH METRICS =====
+        # Inference Success Rate: (valid images with ≥1 prediction) / (total valid images)
+        # Using subquery to find valid images with predictions
+        images_with_predictions = db.session.query(
+            func.count(func.distinct(Prediction.image_id))
+        ).join(
+            TumorImage, Prediction.image_id == TumorImage.image_id
+        ).filter(
+            TumorImage.is_valid == True,
+            Prediction.image_id.isnot(None)
+        ).scalar() or 0
+        
+        inference_success_rate = 0.0
+        if valid_images > 0:
+            inference_success_rate = round((images_with_predictions / valid_images) * 100, 2)
         
         return jsonify({
             'message': 'Statistics retrieved successfully',
@@ -140,18 +174,24 @@ def get_statistics(current_user):
                 'users': {
                     'total': total_users,
                     'active': active_users,
+                    'deactivated': deactivated_users,
                     'admins': admin_users,
-                    'patients': patient_users
+                    'patients': patient_users,
+                    'new_30_days': new_signups_30d
                 },
                 'images': {
                     'total': total_images,
+                    'valid': valid_images,
                     'recent_30_days': recent_images
                 },
                 'predictions': {
                     'total': total_predictions,
                     'recent_30_days': recent_predictions,
-                    'average_confidence': float(avg_confidence),
-                    'by_stage': stages_dict
+                    'average_confidence': avg_confidence_pct,
+                    'by_stage': by_stage
+                },
+                'ai': {
+                    'inference_success_rate': inference_success_rate
                 }
             }
         }), 200

@@ -32,6 +32,12 @@ class Config:
     MODEL_PATH = os.path.join(BASE_DIR, 'models', 'resnet34_lung_segmentation.pth')
     MODEL_NAME = 'resnet34_lung_segmentation'
     
+    # AWS S3 Configuration
+    AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
+    AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
+    AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
+    AWS_S3_BUCKET = os.environ.get('AWS_S3_BUCKET')
+    
     # Ensure necessary directories exist
     @staticmethod
     def init_app(app):

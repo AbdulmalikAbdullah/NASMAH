@@ -1,7 +1,10 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 import os
 import shutil
 import tempfile
+import base64
+import io
+import json
 from app.ai.model_loader import (
     model,
     device,
@@ -15,9 +18,13 @@ from app.ai.model_loader import (
 from app.models import TumorImage, Prediction
 from app.extensions import db
 from app.utils.decorators import token_required
+from app.services.s3_service import get_s3_service
 
 predictions_bp = Blueprint("predictions", __name__)
 bp = predictions_bp
+
+# Initialize S3 service
+s3_service = get_s3_service()
 
 UPLOAD_FOLDER = "uploads"
 ALLOWED_EXTENSIONS = {"npy", "png", "jpg", "jpeg", "zip"}
@@ -236,6 +243,37 @@ def predict_from_image_id(current_user):
                 total_slices = len(slice_files)
                 tumor_slices = len(top_slices)
                 
+                # Upload visualization to S3
+                if visualization and s3_service.is_configured():
+                    try:
+                        # Decode base64 visualization to bytes
+                        viz_bytes = base64.b64decode(visualization)
+                        viz_file = io.BytesIO(viz_bytes)
+                        
+                        # Generate descriptive filename
+                        original_name = os.path.splitext(os.path.basename(filepath))[0]
+                        viz_filename = f"Analysis_Result_{original_name}.png"
+                        
+                        # Upload to S3
+                        s3_result = s3_service.upload_file_to_s3(
+                            viz_file,
+                            current_user.user_id,
+                            viz_filename,
+                            content_type='image/png'
+                        )
+                        
+                        # Update image record with S3 info
+                        if s3_result['success']:
+                            image.s3_url = s3_result['s3_url']
+                            image.s3_key = s3_result['s3_key']
+                            image.s3_bucket = s3_result['s3_bucket']
+                            db.session.commit()
+                            current_app.logger.info(f"Visualization uploaded to S3: {s3_result['s3_url']}")
+                        else:
+                            current_app.logger.warning(f"S3 upload failed: {s3_result.get('error')}, visualization not persisted")
+                    except Exception as e:
+                        current_app.logger.error(f"Error uploading visualization to S3: {str(e)}")
+                
                 top_results = []
                 for s in top_slices:
                     m = s['metrics']
@@ -333,19 +371,31 @@ def get_prediction_history(current_user):
             # Get associated image
             image = TumorImage.query.filter_by(image_id=pred.image_id).first()
             
+            # Generate presigned URL if S3 key exists
+            image_url = None
+            if image and image.s3_key:
+                image_url = s3_service.generate_presigned_url(image.s3_key, expiration=3600)
+                if not image_url:
+                    current_app.logger.warning(f"Failed to generate presigned URL for image {image.image_id}")
+            elif image and image.image_path:
+                # Fallback to local path for old records
+                image_url = image.image_path
+            
             # Map cancer stage to prediction label
             stage_labels = {
                 '0': 'Negative',
                 '1': 'Stage I',
                 '2': 'Stage II',
-                '3': 'Stage III'
+                '3': 'Stage III',
+                '4': 'Stage IV'
             }
             
             results.append({
                 'prediction_id': pred.prediction_id,
                 'image_id': pred.image_id,
-                'image_name': os.path.basename(image.image_path) if image else 'Unknown',
-                'image_url': image.image_path if image else None,
+                'image_name': os.path.basename(image.image_path) if image and image.image_path else 'Unknown',
+                's3_url': image_url,
+                's3_key': image.s3_key if image else None,
                 'timestamp': pred.created_at.isoformat() if pred.created_at else None,
                 'prediction_label': stage_labels.get(pred.cancer_stage, 'Unknown'),
                 'cancer_stage': pred.cancer_stage,
