@@ -55,10 +55,6 @@ class TumorImage(db.Model):
     file_size_mb = db.Column(db.Float, nullable=False)
     file_hash = db.Column(db.String(64), unique=True)
     
-    width_mm = db.Column(db.Float)
-    height_mm = db.Column(db.Float)
-    depth_mm = db.Column(db.Float)
-    
     is_valid = db.Column(db.Boolean, nullable=False, default=True)
     
     # AWS S3 Storage fields
@@ -83,9 +79,6 @@ class TumorImage(db.Model):
             'file_extension': self.file_extension,
             'file_size_mb': self.file_size_mb,
             'file_hash': self.file_hash,
-            'width_mm': self.width_mm,
-            'height_mm': self.height_mm,
-            'depth_mm': self.depth_mm,
             'is_valid': self.is_valid,
             's3_url': self.s3_url,
             's3_key': self.s3_key,
