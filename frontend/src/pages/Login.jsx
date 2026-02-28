@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import Input from '../components/common/Input';
 import Button from '../components/common/Button';
 import toast from 'react-hot-toast';
+import { authService } from '../api/apiService';
 
 /**
  * Login Page Component
@@ -89,6 +90,44 @@ const Login = () => {
     }
   };
 
+  // Forgot password UI state
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotMessage, setForgotMessage] = useState('');
+
+  const handleForgotSubmit = async (e) => {
+    e.preventDefault();
+    setForgotMessage('');
+    setForgotLoading(true);
+
+    if (!forgotEmail) {
+      setForgotMessage('Please enter your email');
+      setForgotLoading(false);
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(forgotEmail)) {
+      setForgotMessage('Please enter a valid email address');
+      setForgotLoading(false);
+      return;
+    }
+
+    try {
+      const resp = await authService.forgotPassword(forgotEmail);
+      // Always show the generic response message (do not expose tokens)
+      toast.success(resp.message || 'If that email exists, a reset email was sent.');
+      setForgotMessage(resp.message || 'If that email exists, a reset email was sent.');
+    } catch (err) {
+      const msg = err.response?.data?.error || err.message || 'Failed to send reset email';
+      setForgotMessage(msg);
+      toast.error(msg);
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full bg-white rounded-lg shadow-xl p-8">
@@ -149,6 +188,44 @@ const Login = () => {
             Sign In
           </Button>
         </form>
+
+        {/* Forgot password (inline) */}
+        <div className="mt-4">
+          <button
+            type="button"
+            className="text-sm text-blue-600 hover:underline"
+            onClick={() => setForgotOpen(prev => !prev)}
+          >
+            Forgot password?
+          </button>
+
+          {forgotOpen && (
+            <form onSubmit={handleForgotSubmit} className="mt-3 space-y-3">
+              <Input
+                label="Email for reset"
+                type="email"
+                name="forgotEmail"
+                value={forgotEmail}
+                onChange={(e) => setForgotEmail(e.target.value)}
+                placeholder="your.email@example.com"
+                disabled={forgotLoading}
+              />
+
+              {forgotMessage && (
+                <div className="text-sm text-gray-700">{forgotMessage}</div>
+              )}
+
+              <div className="flex items-center space-x-2">
+                <Button type="submit" variant="secondary" loading={forgotLoading} disabled={forgotLoading}>
+                  Send reset email
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => { setForgotOpen(false); setForgotMessage(''); }}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          )}
+        </div>
 
         {/* Footer */}
         <div className="mt-6 text-center">

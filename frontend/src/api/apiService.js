@@ -34,6 +34,16 @@ export const authService = {
     });
     return response.data;
   },
+
+  forgotPassword: async (email) => {
+    const response = await axiosInstance.post('/api/auth/forgot-password', { email });
+    return response.data;
+  },
+
+  resetPassword: async (token, newPassword) => {
+    const response = await axiosInstance.post('/api/auth/reset-password', { token, new_password: newPassword });
+    return response.data;
+  },
 };
 
 // ============================================

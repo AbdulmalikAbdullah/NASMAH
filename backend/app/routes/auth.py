@@ -3,6 +3,10 @@ from app.models import User, UserSession
 from app.extensions import db
 from app.services.auth_service import AuthService
 from app.services.logging_service import LoggingService
+import smtplib
+import os
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from app.utils.validators import Validators, validate_request_data
 from app.utils.security import SecurityUtils
 import uuid
@@ -350,3 +354,142 @@ def change_password():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': 'Failed to change password: ' + str(e)}), 500
+
+
+@bp.route('/forgot-password', methods=['POST'])
+def forgot_password():
+    """Initiate password reset by sending an email with a time-limited token"""
+    try:
+        data = request.get_json()
+        required = ['email']
+        is_valid, error = validate_request_data(data, required)
+        if not is_valid:
+            return jsonify({'error': error}), 400
+
+        email = data['email']
+        user = User.query.filter_by(email=email).first()
+
+        # Always return success to avoid user enumeration; if user exists, send email
+        if not user:
+            return jsonify({'message': 'If an account with that email exists, a reset email was sent'}), 200
+
+        # Generate a short-lived JWT token for password reset (1 hour)
+        jwt_id = str(uuid.uuid4())
+        reset_token = SecurityUtils.generate_jwt(user.user_id, jwt_id, expires_in_hours=1)
+
+        # Build reset link (frontend should handle reset flow)
+        frontend_url = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
+        reset_link = f"{frontend_url}/reset-password?token={reset_token}"
+
+        # Attempt to send via SMTP if configured, otherwise return token in response (dev fallback)
+        smtp_host = os.environ.get('SMTP_HOST')
+        email_sent = False
+        send_error = None
+        if smtp_host:
+            try:
+                smtp_port = int(os.environ.get('SMTP_PORT', 587))
+                smtp_user = os.environ.get('SMTP_USER')
+                smtp_pass = os.environ.get('SMTP_PASS')
+                use_tls = os.environ.get('SMTP_USE_TLS', '1') in ['1', 'true', 'True']
+
+                subject = 'Password reset instructions'
+
+                # Plain text fallback (do not expose raw token)
+                text_body = (
+                    f"Hello {user.Fname},\n\n"
+                    "To reset your password please open the reset page in your browser.\n"
+                    f"If your email client supports HTML, click the link provided in this message.\n\n"
+                    "If you didn't request this, ignore this email."
+                )
+
+                # HTML body with clickable link (token included only in href, not displayed)
+                html_body = (
+                    f"<p>Hello {user.Fname},</p>"
+                    f"<p>To reset your password <a href=\"{reset_link}\">click here</a>.</p>"
+                    "<p>If you didn't request this, ignore this email.</p>"
+                )
+
+                msg = MIMEMultipart('alternative')
+                msg['Subject'] = subject
+                from_addr = os.environ.get('SMTP_FROM') or smtp_user or 'no-reply@example.com'
+                msg['From'] = from_addr
+                msg['To'] = user.email
+
+                part1 = MIMEText(text_body, 'plain')
+                part2 = MIMEText(html_body, 'html')
+                msg.attach(part1)
+                msg.attach(part2)
+
+                server = smtplib.SMTP(smtp_host, smtp_port, timeout=10)
+                if use_tls:
+                    server.starttls()
+                if smtp_user and smtp_pass:
+                    server.login(smtp_user, smtp_pass)
+
+                server.sendmail(from_addr, [user.email], msg.as_string())
+                server.quit()
+                email_sent = True
+            except Exception as e:
+                send_error = str(e)
+
+        # Log the reset request
+        LoggingService.log_action(
+            action=f"Password Reset Requested: {user.email}",
+            user_id=user.user_id
+        )
+
+        resp = {'message': 'If an account with that email exists, a reset email was sent'}
+        if not smtp_host or not email_sent:
+            # Do not return the reset token in responses (avoid exposing it).
+            if send_error:
+                resp['send_error'] = send_error
+
+        return jsonify(resp), 200
+
+    except Exception as e:
+        return jsonify({'error': 'Failed to initiate password reset: ' + str(e)}), 500
+
+
+@bp.route('/reset-password', methods=['POST'])
+def reset_password():
+    """Reset password using token and new password"""
+    try:
+        data = request.get_json()
+        required = ['token', 'new_password']
+        is_valid, error = validate_request_data(data, required)
+        if not is_valid:
+            return jsonify({'error': error}), 400
+
+        token = data['token']
+        new_password = data['new_password']
+
+        # Decode token
+        payload, decode_error = SecurityUtils.decode_jwt(token)
+        if decode_error:
+            return jsonify({'error': decode_error}), 400
+
+        user_id = payload.get('user_id')
+        user = User.query.filter_by(user_id=user_id).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        # Validate new password strength
+        is_valid, error = Validators.validate_password(new_password)
+        if not is_valid:
+            return jsonify({'error': error}), 400
+
+        # Update password
+        user.password_hash = SecurityUtils.hash_password(new_password)
+        db.session.commit()
+
+        # Log the password reset action
+        LoggingService.log_action(
+            action=f"Password Reset: {user.email}",
+            user_id=user.user_id
+        )
+
+        return jsonify({'message': 'Password has been reset successfully'}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to reset password: ' + str(e)}), 500
