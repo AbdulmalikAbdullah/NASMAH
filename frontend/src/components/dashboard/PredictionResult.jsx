@@ -19,6 +19,8 @@ const PredictionResult = ({ prediction }) => {
     top_results,
     fileName
   } = prediction;
+  // determine whether this prediction represents a batch upload
+  const isBatch = Boolean(batch_mode) || Boolean(summary);
 
   // Get color based on prediction stage
   const getStageColor = (stage) => {
@@ -137,7 +139,7 @@ const PredictionResult = ({ prediction }) => {
         )}
 
         {/* Batch Summary (if batch mode) */}
-        {batch_mode && summary && (
+        {isBatch && summary && (
           <div className="border-b pb-4">
             <h3 className="text-sm font-medium text-gray-500 mb-3">Batch Analysis Summary</h3>
             <div className="grid grid-cols-2 gap-4">
@@ -173,7 +175,7 @@ const PredictionResult = ({ prediction }) => {
               />
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              {batch_mode 
+              {isBatch 
                 ? 'Showing top slices with detected tumors (Original | Overlay | Confidence Map)'
                 : 'Left: Original | Center: Tumor Overlay | Right: Confidence Map'}
             </p>
@@ -181,7 +183,7 @@ const PredictionResult = ({ prediction }) => {
         )}
 
         {/* Top Results (if batch mode) */}
-        {batch_mode && top_results && top_results.length > 0 && (
+        {isBatch && top_results && top_results.length > 0 && (
           <div className="border-b pb-4">
             <h3 className="text-sm font-medium text-gray-500 mb-3">Top Affected Slices</h3>
             <div className="overflow-x-auto">
@@ -229,7 +231,7 @@ const PredictionResult = ({ prediction }) => {
           </div>
           <div>
             <h3 className="text-sm font-medium text-gray-500 mb-1">Mode</h3>
-            <p className="text-gray-900 text-sm">{batch_mode ? 'Batch (Multiple Slices)' : 'Single Image'}</p>
+            <p className="text-gray-900 text-sm">{isBatch ? 'Batch (Multiple Slices)' : 'Single Image'}</p>
           </div>
         </div>
 

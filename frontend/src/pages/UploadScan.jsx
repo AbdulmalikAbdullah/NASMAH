@@ -84,7 +84,7 @@ const UploadScan = () => {
           </div>
         )}
 
-        <div className="max-w-4xl">
+        <div className="max-w-8xl">
           {/* File Upload Component */}
           <FileUpload onUploadSuccess={handleFileUpload} loading={loading} />
           

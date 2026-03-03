@@ -13,6 +13,9 @@ import LoadingSpinner from './LoadingSpinner';
  * - Loading states and graceful fallbacks
  */
 const ScanViewerModal = ({ isOpen, onClose, prediction }) => {
+  if (!prediction) return null;
+  // determine if we should display batch details; summary comes from upload response
+  const isBatch = Boolean(prediction.batch_mode) || Boolean(prediction.summary);
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
   const [imageSource, setImageSource] = useState(null);
@@ -200,7 +203,7 @@ const ScanViewerModal = ({ isOpen, onClose, prediction }) => {
           </div>
 
           {/* Conditional Batch Analysis Summary */}
-          {prediction.batch_summary && (
+          {isBatch && prediction.summary && (
             <div className="mb-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-3">Batch Analysis Summary</h3>
               
@@ -209,37 +212,37 @@ const ScanViewerModal = ({ isOpen, onClose, prediction }) => {
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
                   <p className="text-xs text-blue-700 font-medium mb-1">Total Slices</p>
                   <p className="text-2xl font-bold text-blue-900">
-                    {prediction.batch_summary.total_slices}
+                    {prediction.summary.total_slices}
                   </p>
                 </div>
 
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
                   <p className="text-xs text-red-700 font-medium mb-1">Tumors Detected</p>
                   <p className="text-2xl font-bold text-red-900">
-                    {prediction.batch_summary.slices_with_tumors || prediction.batch_summary.tumor_slices || 0}
+                    {prediction.summary.tumor_slices}
                   </p>
                 </div>
 
                 <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 text-center">
                   <p className="text-xs text-orange-700 font-medium mb-1">Max Tumor Size</p>
                   <p className="text-2xl font-bold text-orange-900">
-                    {prediction.batch_summary.max_tumor_size}
-                    {typeof prediction.batch_summary.max_tumor_size === 'number' && 'mm'}
+                    {prediction.summary.max_tumor_size}
+                    {typeof prediction.summary.max_tumor_size === 'number' && 'mm'}
                   </p>
                 </div>
 
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
                   <p className="text-xs text-green-700 font-medium mb-1">Avg Confidence</p>
                   <p className="text-2xl font-bold text-green-900">
-                    {typeof prediction.batch_summary.avg_confidence === 'number' 
-                      ? `${prediction.batch_summary.avg_confidence.toFixed(1)}%`
-                      : prediction.batch_summary.avg_confidence}
+                    {typeof prediction.summary.avg_confidence === 'number' 
+                      ? `${prediction.summary.avg_confidence.toFixed(1)}%`
+                      : prediction.summary.avg_confidence}
                   </p>
                 </div>
               </div>
 
               {/* Top Affected Slices Table */}
-              {prediction.batch_summary.top_slices && prediction.batch_summary.top_slices.length > 0 && (
+              {prediction.top_results && prediction.top_results.length > 0 && (
                 <div>
                   <h4 className="font-medium text-gray-900 mb-2">Top Affected Slices</h4>
                   <div className="overflow-x-auto">
@@ -253,26 +256,24 @@ const ScanViewerModal = ({ isOpen, onClose, prediction }) => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
-                        {prediction.batch_summary.top_slices.map((slice, index) => (
+                        {prediction.top_results.map((slice, index) => (
                           <tr key={index} className="hover:bg-gray-50">
                             <td className="px-4 py-2">
-                              {slice.slice_number || slice.slice_index || index + 1}
+                              {slice.slice_index || index + 1}
                             </td>
                             <td className="px-4 py-2">
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium bg-${getStageColor(slice.stage)}-100 text-${getStageColor(slice.stage)}-800`}>
-                                {slice.stage_label || getStageLabel(slice.stage)}
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStageColor(String(slice.stage))}`}>
+                                {slice.stage_label || `Stage ${slice.stage}`}
                               </span>
                             </td>
                             <td className="px-4 py-2">
-                              {typeof slice.confidence === 'number' 
-                                ? `${slice.confidence.toFixed(1)}%`
-                                : slice.confidence_rate
+                              {(slice.confidence_rate != null)
                                 ? `${(slice.confidence_rate * 100).toFixed(1)}%`
                                 : 'N/A'}
                             </td>
                             <td className="px-4 py-2">
-                              {slice.tumor_size || slice.tumor_size_mm 
-                                ? `${(slice.tumor_size || slice.tumor_size_mm).toFixed(1)} mm`
+                              {slice.tumor_size_mm != null
+                                ? `${slice.tumor_size_mm.toFixed(1)} mm`
                                 : 'N/A'}
                             </td>
                           </tr>
@@ -337,7 +338,7 @@ const ScanViewerModal = ({ isOpen, onClose, prediction }) => {
             </svg>
             <span className="font-medium">Mode:</span>
             <span className="text-gray-700">
-              {prediction.batch_summary ? 'Batch (Multiple Slices)' : 'Single Image'}
+              {isBatch ? 'Batch (Multiple Slices)' : 'Single Image'}
             </span>
           </div>
         </div>

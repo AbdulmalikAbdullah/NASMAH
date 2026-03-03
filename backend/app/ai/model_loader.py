@@ -1,300 +1,3 @@
-# import os
-# import io
-# import base64
-# import numpy as np
-# import torch
-# import torch.nn as nn
-# from flask import request, jsonify, render_template
-# from PIL import Image
-# import matplotlib
-# matplotlib.use('Agg')
-# import matplotlib.pyplot as plt
-# import zipfile
-# import tempfile
-# import shutil
-
-
-# # Configuration
-# UPLOAD_FOLDER = 'uploads'
-# MODEL_NAME = 'unet_lung_segmentation.pth'
-# ALLOWED_EXTENSIONS = {'npy', 'png', 'jpg', 'jpeg', 'zip'}
-
-# # Try to locate the model file by searching upward from this file and the CWD
-# MODEL_PATH = None
-# search_locations = []
-# cwd = os.path.abspath(os.getcwd())
-# search_locations.append(cwd)
-# base = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-# for _ in range(5):
-#     candidate = os.path.join(base, MODEL_NAME)
-#     search_locations.append(base)
-#     if os.path.exists(candidate):
-#         MODEL_PATH = candidate
-#         break
-#     base = os.path.dirname(base)
-
-# # Also check the current package directory
-# pkg_candidate = os.path.join(os.path.dirname(__file__), MODEL_NAME)
-# if MODEL_PATH is None and os.path.exists(pkg_candidate):
-#     MODEL_PATH = pkg_candidate
-
-
-# # Ensure upload folder exists (Flask app will configure MAX_CONTENT_LENGTH)
-# os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-# # Model Definition
-# class MiniUNet(nn.Module):
-#     def __init__(self):
-#         super().__init__()
-        
-#         self.enc1 = nn.Sequential(
-#             nn.Conv2d(1, 16, 3, padding=1),
-#             nn.ReLU()
-#         )
-#         self.pool = nn.MaxPool2d(2)
-        
-#         self.enc2 = nn.Sequential(
-#             nn.Conv2d(16, 32, 3, padding=1),
-#             nn.ReLU()
-#         )
-        
-#         self.up = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
-        
-#         self.dec1 = nn.Sequential(
-#             nn.Conv2d(32 + 16, 16, 3, padding=1),
-#             nn.ReLU()
-#         )
-        
-#         self.out = nn.Conv2d(16, 1, 1)
-    
-#     def forward(self, x):
-#         x1 = self.enc1(x)
-#         x2 = self.enc2(self.pool(x1))
-#         x3 = self.up(x2)
-#         x4 = torch.cat([x3, x1], dim=1)
-#         return self.out(self.dec1(x4))
-
-# # Load model
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# model = MiniUNet().to(device)
-
-# if MODEL_PATH and os.path.exists(MODEL_PATH):
-#     try:
-#         model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
-#         model.eval()
-#         print(f"✓ Model loaded successfully from {MODEL_PATH} on {device}")
-#     except Exception as e:
-#         print(f"⚠ Warning: Could not load model from {MODEL_PATH}: {e}")
-# else:
-#     print(f"⚠ Warning: Model file '{MODEL_NAME}' not found. Searched locations: {search_locations}. Continuing without pretrained weights.")
-
-# def allowed_file(filename):
-#     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-# def preprocess_image(img_array):
-#     """Normalize image to [0, 1] range"""
-#     img_norm = (img_array - img_array.min()) / (img_array.max() - img_array.min() + 1e-8)
-#     return img_norm
-
-# def load_image_file(filepath):
-#     """Load image from either .npy or standard image formats"""
-#     ext = filepath.rsplit('.', 1)[1].lower()
-    
-#     if ext == 'npy':
-#         img = np.load(filepath).astype(np.float32)
-#     else:
-#         pil_img = Image.open(filepath).convert('L')
-#         img = np.array(pil_img).astype(np.float32)
-    
-#     return img
-
-# def inference_single_slice(model, img_array, device):
-#     """Run inference on a single CT slice"""
-#     model.eval()
-    
-#     img_norm = preprocess_image(img_array)
-#     img_tensor = torch.tensor(img_norm).unsqueeze(0).unsqueeze(0).to(device)
-    
-#     with torch.no_grad():
-#         logits = model(img_tensor)
-#         pred = torch.sigmoid(logits)
-#         pred_mask = (pred > 0.5).float().cpu().numpy()[0, 0]
-#         confidence = pred.cpu().numpy()[0, 0]
-    
-#     return pred_mask, confidence
-
-# def calculate_metrics_for_slice(pred_mask, confidence, img_shape):
-#     """Calculate comprehensive metrics for a single slice.
-
-#     This now computes an approximate tumor diameter (assuming the tumor
-#     area is circular) and assigns a TNM-style stage (0-3) based on the
-#     diameter thresholds you provided. Stage IV cannot be determined
-#     from a single-slice area estimate and therefore is not assigned
-#     automatically.
-#     """
-#     binary_mask = (pred_mask > 0.5).astype(np.float32)
-#     tumor_pixels = int(np.sum(binary_mask))
-#     total_pixels = int(binary_mask.size)
-
-#     # Confidence rate
-#     if tumor_pixels > 0:
-#         try:
-#             confidence_rate = float(np.mean(confidence[binary_mask > 0]))
-#         except Exception:
-#             confidence_rate = float(np.mean(confidence))
-#     else:
-#         confidence_rate = 0.0
-
-#     # Tumor area in mm² (pixel_spacing default 0.5 mm)
-#     pixel_spacing = 0.5
-#     tumor_area_mm2 = float(tumor_pixels * (pixel_spacing ** 2))
-
-
-#     # Stage mapping (based on diameter thresholds provided)
-#     # Stage 0: T < 10 mm
-#     # Stage I: 10 mm ≤ T < 40 mm
-#     # Stage II: 40 mm ≤ T < 70 mm
-#     # Stage III: T ≥ 70 mm
-#     if tumor_area_mm2 <= 0:
-#         stage_num = None
-#         stage_label = 'Unknown'
-#     elif tumor_area_mm2 < 10.0:
-#         stage_num = 0
-#         stage_label = 'Stage 0 (T < 10 mm)'
-#     elif tumor_area_mm2 < 40.0:
-#         stage_num = 1
-#         stage_label = 'Stage I (10–39 mm)'
-#     elif tumor_area_mm2 < 70.0:
-#         stage_num = 2
-#         stage_label = 'Stage II (40–69 mm)'
-#     else:
-#         stage_num = 3
-#         stage_label = 'Stage III (T ≥ 70 mm)'
-
-#     return {
-#         'tumor_pixels': tumor_pixels,
-#         'total_pixels': total_pixels,
-#         'has_tumor': bool(tumor_pixels > 0),
-#         'confidence_rate': float(confidence_rate),
-#         'tumor_size_mm': round(tumor_area_mm2, 2),
-#         'tumor_stage': stage_num,
-#         'tumor_stage_label': stage_label
-#     }
-
-# def process_multiple_slices(slice_files_dict, device, top_k=10):
-#     """Process multiple CT slices and return top K results"""
-#     all_results = []
-    
-#     print(f"\n{'='*50}")
-#     print(f"Processing {len(slice_files_dict)} slices...")
-#     print(f"{'='*50}")
-    
-#     for idx, (filename, filepath) in enumerate(slice_files_dict.items()):
-#         try:
-#             img_array = load_image_file(filepath)
-#             pred_mask, confidence = inference_single_slice(model, img_array, device)
-#             metrics = calculate_metrics_for_slice(pred_mask, confidence, img_array.shape)
-            
-#             result = {
-#                 'slice_index': idx,
-#                 'filename': filename,
-#                 'image': img_array,
-#                 'pred_mask': pred_mask,
-#                 'confidence': confidence,
-#                 'metrics': metrics
-#             }
-            
-#             all_results.append(result)
-            
-#             if (idx + 1) % 50 == 0:
-#                 print(f"  Processed {idx + 1}/{len(slice_files_dict)} slices...")
-                
-#         except Exception as e:
-#             print(f"  Error processing {filename}: {e}")
-#             continue
-    
-#     # Filter slices with tumors
-#     tumor_slices = [r for r in all_results if r['metrics']['has_tumor']]
-    
-#     # Sort by tumor size
-#     tumor_slices.sort(key=lambda x: x['metrics']['tumor_pixels'], reverse=True)
-    
-#     # Get top K
-#     top_slices = tumor_slices[:top_k]
-    
-#     print(f"✓ Found {len(tumor_slices)} slices with tumors")
-#     print(f"✓ Returning top {len(top_slices)} results")
-    
-#     return top_slices
-
-# def create_batch_visualization(top_slices):
-#     """Create a grid visualization of top slices"""
-#     n_slices = len(top_slices)
-    
-#     if n_slices == 0:
-#         return None
-    
-#     n_rows = min(n_slices, 10)
-#     fig, axes = plt.subplots(n_rows, 3, figsize=(15, 5 * n_rows))
-    
-#     if n_rows == 1:
-#         axes = axes.reshape(1, -1)
-    
-#     for idx, slice_data in enumerate(top_slices[:10]):
-#         img = slice_data['image']
-#         pred_mask = slice_data['pred_mask']
-#         confidence = slice_data['confidence']
-#         metrics = slice_data['metrics']
-        
-#         # Original
-#         axes[idx, 0].imshow(img, cmap='bone')
-#         axes[idx, 0].set_title(f"Slice {slice_data['slice_index']}\n{slice_data['filename']}", fontsize=8)
-#         axes[idx, 0].axis('off')
-        
-#         # Overlay
-#         axes[idx, 1].imshow(img, cmap='bone')
-#         axes[idx, 1].imshow(np.ma.masked_where(pred_mask == 0, pred_mask), 
-#                            alpha=0.5, cmap='autumn')
-#         axes[idx, 1].set_title(f"Tumor: {metrics['tumor_pixels']} px\n{metrics['tumor_size_mm']:.1f} mm²", fontsize=8)
-#         axes[idx, 1].axis('off')
-        
-#         # Confidence
-#         im = axes[idx, 2].imshow(confidence, cmap='jet')
-#         axes[idx, 2].set_title(f"Confidence: {metrics['confidence_rate']:.2%}", fontsize=8)
-#         axes[idx, 2].axis('off')
-#         plt.colorbar(im, ax=axes[idx, 2], fraction=0.046, pad=0.04)
-    
-#     plt.tight_layout()
-    
-#     buf = io.BytesIO()
-#     plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
-#     buf.seek(0)
-#     img_base64 = base64.b64encode(buf.read()).decode('utf-8')
-#     plt.close(fig)
-    
-#     return img_base64
-
-# def extract_zip(zip_path, extract_to):
-#     """Extract zip file and return dict of .npy files"""
-#     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-#         zip_ref.extractall(extract_to)
-    
-#     npy_files = {}
-#     for root, dirs, files in os.walk(extract_to):
-#         for file in files:
-#             if file.endswith('.npy'):
-#                 filepath = os.path.join(root, file)
-#                 npy_files[file] = filepath
-    
-#     # Sort by filename
-#     try:
-#         npy_files = dict(sorted(npy_files.items(), key=lambda x: int(x[0].split('.')[0])))
-#     except:
-#         npy_files = dict(sorted(npy_files.items()))
-    
-#     return npy_files
-
-
 import os
 import io
 import base64
@@ -308,13 +11,15 @@ import matplotlib.pyplot as plt
 import zipfile
 import tempfile
 import shutil
-
 import segmentation_models_pytorch as smp
+import matplotlib.lines as mlines
+import matplotlib.patches as mpatches
+from scipy.spatial import ConvexHull
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 UPLOAD_FOLDER = 'uploads'
 MODEL_NAME = 'resnet34_lung_segmentation.pth'          # ← NEW model file name
-ALLOWED_EXTENSIONS = {'npy', 'png', 'jpg', 'jpeg', 'zip'}
+ALLOWED_EXTENSIONS = {'npy', 'png', 'jpg', 'jpeg', 'zip', 'dcm', 'dicom'}
 
 # ── Locate the model file (searches upward from this file and CWD) ────────────
 MODEL_PATH = None
@@ -421,19 +126,14 @@ def inference_single_slice(mdl, img_array, dev):
 
 def calculate_metrics_for_slice(pred_mask, confidence, img_shape):
     """
-    Calculate tumour metrics for a single slice and assign a TNM-style stage.
-
-    Stage mapping (diameter thresholds):
-        Stage 0  : no tumour detected
-        Stage I  : area < 10 mm²   (T < 10 mm)
-        Stage II : 10 ≤ area < 40  (10–39 mm)
-        Stage III: 40 ≤ area < 70  (40–69 mm)
-        Stage IV : area ≥ 70       (≥ 70 mm)
+    Calculate tumour metrics for a single slice using RECIST-style longest
+    diameter measured across the convex-hull of the predicted mask.
     """
-    binary_mask   = (pred_mask > 0.5).astype(np.float32)
-    tumor_pixels  = int(np.sum(binary_mask))
-    total_pixels  = int(binary_mask.size)
+    binary_mask = (pred_mask > 0.5).astype(np.uint8)
+    tumor_pixels = int(np.sum(binary_mask))
+    total_pixels = int(binary_mask.size)
 
+    # ===== Confidence =====
     if tumor_pixels > 0:
         try:
             confidence_rate = float(np.mean(confidence[binary_mask > 0]))
@@ -442,30 +142,56 @@ def calculate_metrics_for_slice(pred_mask, confidence, img_shape):
     else:
         confidence_rate = 0.0
 
-    pixel_spacing   = 0.5  # mm
-    tumor_area_mm2  = float(tumor_pixels * (pixel_spacing ** 2))
+    pixel_spacing = 0.5  # mm
 
-    if tumor_area_mm2 <= 0:
+    # ===== RECIST Longest Diameter (convex-hull based) =====
+    def _recist_longest(mask_2d, spacing_mm=0.5):
+        coords = np.argwhere(mask_2d > 0)
+        if len(coords) < 2:
+            return 0.0, None, None, 0
+
+        try:
+            pts = coords[ConvexHull(coords).vertices]
+        except Exception:
+            pts = coords
+
+        best_d = 0.0
+        pa, pb = pts[0], pts[1]
+        for i in range(len(pts)):
+            for j in range(i + 1, len(pts)):
+                d = float(np.linalg.norm(pts[i] - pts[j]))
+                if d > best_d:
+                    best_d, pa, pb = d, pts[i], pts[j]
+
+        return best_d * spacing_mm, tuple(int(x) for x in pa), tuple(int(x) for x in pb), int(mask_2d.sum())
+
+    diameter_mm, point_a, point_b, tumor_area_px = _recist_longest(binary_mask, pixel_spacing)
+
+    # ===== Stage Classification Based on DIAMETER =====
+    if diameter_mm <= 0:
         stage_num, stage_label = None, 'Unknown'
-    elif tumor_area_mm2 < 10.0:
+    elif diameter_mm < 10:
         stage_num, stage_label = 0, 'Stage 0 (T < 10 mm)'
-    elif tumor_area_mm2 < 40.0:
+    elif diameter_mm < 40:
         stage_num, stage_label = 1, 'Stage I (10–39 mm)'
-    elif tumor_area_mm2 < 70.0:
+    elif diameter_mm < 70:
         stage_num, stage_label = 2, 'Stage II (40–69 mm)'
     else:
         stage_num, stage_label = 3, 'Stage III (T ≥ 70 mm)'
 
     return {
-        'tumor_pixels'     : tumor_pixels,
-        'total_pixels'     : total_pixels,
-        'has_tumor'        : bool(tumor_pixels > 0),
-        'confidence_rate'  : float(confidence_rate),
-        'tumor_size_mm'    : round(tumor_area_mm2, 2),
-        'tumor_stage'      : stage_num,
+        'tumor_pixels': tumor_pixels,
+        'total_pixels': total_pixels,
+        'has_tumor': bool(tumor_pixels > 0),
+        'confidence_rate': confidence_rate,
+        'tumor_size_mm': round(diameter_mm, 2),
+        'tumor_diameter_cm': round(diameter_mm / 10, 2),
+        'tumor_stage': stage_num,
         'tumor_stage_label': stage_label,
+        'tumor_area_px': tumor_area_px,
+        'recist_point_a': point_a,
+        'recist_point_b': point_b,
     }
-
 
 def process_multiple_slices(slice_files_dict, dev, top_k=10):
     """Process multiple CT slices and return the top-K most affected slices."""
@@ -523,17 +249,39 @@ def create_batch_visualization(top_slices):
         metrics   = sd['metrics']
 
         axes[idx, 0].imshow(img, cmap='bone')
-        axes[idx, 0].set_title(f"Slice {sd['slice_index']}\n{sd['filename']}", fontsize=8)
+        axes[idx, 0].set_title(f"Slice {sd['slice_index']}\n{sd['filename']}", fontsize=12)
         axes[idx, 0].axis('off')
 
         axes[idx, 1].imshow(img, cmap='bone')
         axes[idx, 1].imshow(np.ma.masked_where(pred_mask == 0, pred_mask), alpha=0.5, cmap='autumn')
-        axes[idx, 1].set_title(
-            f"Tumour: {metrics['tumor_pixels']} px\n{metrics['tumor_size_mm']:.1f} mm²", fontsize=8)
+        # Overlay RECIST measurement if available
+        recist_pa = metrics.get('recist_point_a')
+        recist_pb = metrics.get('recist_point_b')
+        meas_text = f"Tumour: {metrics['tumor_pixels']} px\n{metrics['tumor_size_mm']:.1f} mm"
+        axes[idx, 1].set_title(meas_text, fontsize=12)
+        if recist_pa and recist_pb:
+            # plot line and endpoints (note: points are (y,x))
+            axes[idx, 1].plot([recist_pa[1], recist_pb[1]], [recist_pa[0], recist_pb[0]],
+                              color='cyan', linewidth=2.5)
+            for pt, lbl in [(recist_pa, 'A'), (recist_pb, 'B')]:
+                axes[idx, 1].scatter(pt[1], pt[0], s=60, color='#ffeb3b', edgecolors='white', linewidths=0.8)
+                axes[idx, 1].text(pt[1] + 3, pt[0] - 3, lbl, color='#ffeb3b', fontsize=12, fontweight='bold')
+            # Zoom into the tumour region so A/B are clear
+            try:
+                rows, cols = np.where(pred_mask > 0)
+                m = 20
+                x0 = max(cols.min() - m, 0)
+                x1 = min(cols.max() + m, pred_mask.shape[1])
+                y0 = min(rows.max() + m, pred_mask.shape[0])
+                y1 = max(rows.min() - m, 0)
+                axes[idx, 1].set_xlim(x0, x1)
+                axes[idx, 1].set_ylim(y0, y1)
+            except Exception:
+                pass
         axes[idx, 1].axis('off')
 
         im = axes[idx, 2].imshow(conf, cmap='jet')
-        axes[idx, 2].set_title(f"Confidence: {metrics['confidence_rate']:.2%}", fontsize=8)
+        axes[idx, 2].set_title(f"Confidence: {metrics['confidence_rate']:.2%}", fontsize=12)
         axes[idx, 2].axis('off')
         plt.colorbar(im, ax=axes[idx, 2], fraction=0.046, pad=0.04)
 

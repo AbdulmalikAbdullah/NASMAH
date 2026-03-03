@@ -79,12 +79,12 @@ const FileUpload = ({ onUploadSuccess, loading }) => {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
+    <div className="bg-white rounded-lg shadow-md p-6 box-border">
       <h2 className="text-2xl font-bold text-gray-800 mb-4">Upload Medical Image</h2>
       
       {/* Drag and drop area */}
       <div
-        className={`border-2 border-dashed rounded-lg p-8 text-center transition-all ${
+        className={`w-full border-2 border-dashed rounded-lg p-8 text-center transition-all ${
           dragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50'
         }`}
         onDragEnter={handleDrag}

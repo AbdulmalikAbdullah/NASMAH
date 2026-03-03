@@ -27,7 +27,7 @@ bp = predictions_bp
 s3_service = get_s3_service()
 
 UPLOAD_FOLDER = "uploads"
-ALLOWED_EXTENSIONS = {"npy", "png", "jpg", "jpeg", "zip"}
+ALLOWED_EXTENSIONS = {"npy", "png", "jpg", "jpeg", "zip", "dcm", "dicom"}
 
 # Ensure upload folder exists
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -208,7 +208,7 @@ def predict_from_image_id(current_user):
                         image_id=image_id,
                         cancer_stage='0',
                         confidence=0.95,
-                        model_name='unet_lung_segmentation'
+                        model_name='Nasmah 2.0'
                     )
                     db.session.add(prediction)
                     db.session.commit()
@@ -234,7 +234,7 @@ def predict_from_image_id(current_user):
                     image_id=image_id,
                     cancer_stage=cancer_stage,
                     confidence=confidence,
-                    model_name='unet_lung_segmentation'
+                    model_name='Nasmah 2.0'
                 )
                 db.session.add(prediction)
                 db.session.commit()
@@ -339,7 +339,7 @@ def predict_from_image_id(current_user):
             image_id=image_id,
             cancer_stage=cancer_stage,
             confidence=confidence,
-            model_name='unet_lung_segmentation'
+            model_name='Nasmah 2.0'
         )
         
         db.session.add(prediction)
@@ -380,6 +380,11 @@ def get_prediction_history(current_user):
             elif image and image.image_path:
                 # Fallback to local path for old records
                 image_url = image.image_path
+            # infer batch_mode from image metadata (zip uploads)
+            batch_flag = False
+            if image:
+                ext = (image.file_extension or '').lower()
+                batch_flag = ext == 'zip' or (image.image_path or '').lower().endswith('.zip')
             
             # Map cancer stage to prediction label
             stage_labels = {
@@ -400,7 +405,8 @@ def get_prediction_history(current_user):
                 'prediction_label': stage_labels.get(pred.cancer_stage, 'Unknown'),
                 'cancer_stage': pred.cancer_stage,
                 'confidence': round(pred.confidence * 100, 2),
-                'model_name': pred.model_name
+                'model_name': pred.model_name,
+                'batch_mode': batch_flag
             })
         
         return jsonify({

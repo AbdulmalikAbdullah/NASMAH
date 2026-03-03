@@ -61,6 +61,9 @@ const Dashboard = () => {
         setRecentPredictions(prev => [
           {
             ...prediction,
+            batch_mode,
+            summary,
+            top_results,
             image_id: imageId,
             fileName: file.name,
             timestamp: new Date().toISOString(),

@@ -45,4 +45,8 @@ wheel>=0.38.0
 # Visualization and image processing
 matplotlib>=3.7.0
 
+# Deep learning models for medical image segmentation
 segmentation-models-pytorch>=0.3.0
+
+# Additional dependencies for medical image processing
+scipy==1.10.1
