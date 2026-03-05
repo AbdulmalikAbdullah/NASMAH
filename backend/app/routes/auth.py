@@ -9,6 +9,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from app.utils.validators import Validators, validate_request_data
 from app.utils.security import SecurityUtils
+from app.services.email_service import EmailService
 import uuid
 from datetime import datetime, timedelta
 
@@ -361,93 +362,28 @@ def forgot_password():
     """Initiate password reset by sending an email with a time-limited token"""
     try:
         data = request.get_json()
-        required = ['email']
-        is_valid, error = validate_request_data(data, required)
+        is_valid, error = validate_request_data(data, ['email'])
         if not is_valid:
             return jsonify({'error': error}), 400
 
-        email = data['email']
-        user = User.query.filter_by(email=email).first()
+        user = User.query.filter_by(email=data['email']).first()
+        
+        # Only process if user exists, but we will return the same message regardless (Anti-enumeration)
+        if user:
+            # Generate a short-lived JWT token for password reset (1 hour)
+            jwt_id = str(uuid.uuid4())
+            reset_token = SecurityUtils.generate_jwt(user.user_id, jwt_id, expires_in_hours=1)
+            
+            # Delegate the heavy SMTP email logic to a separate service
+            EmailService.send_password_reset(user, reset_token)
 
-        # Always return success to avoid user enumeration; if user exists, send email
-        if not user:
-            return jsonify({'message': 'If an account with that email exists, a reset email was sent'}), 200
+            LoggingService.log_action(f"Password Reset Requested: {user.email}", user.user_id)
 
-        # Generate a short-lived JWT token for password reset (1 hour)
-        jwt_id = str(uuid.uuid4())
-        reset_token = SecurityUtils.generate_jwt(user.user_id, jwt_id, expires_in_hours=1)
-
-        # Build reset link (frontend should handle reset flow)
-        frontend_url = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
-        reset_link = f"{frontend_url}/reset-password?token={reset_token}"
-
-        # Attempt to send via SMTP if configured, otherwise return token in response (dev fallback)
-        smtp_host = os.environ.get('SMTP_HOST')
-        email_sent = False
-        send_error = None
-        if smtp_host:
-            try:
-                smtp_port = int(os.environ.get('SMTP_PORT', 587))
-                smtp_user = os.environ.get('SMTP_USER')
-                smtp_pass = os.environ.get('SMTP_PASS')
-                use_tls = os.environ.get('SMTP_USE_TLS', '1') in ['1', 'true', 'True']
-
-                subject = 'Password reset instructions'
-
-                # Plain text fallback (do not expose raw token)
-                text_body = (
-                    f"Hello {user.Fname},\n\n"
-                    "To reset your password please open the reset page in your browser.\n"
-                    f"If your email client supports HTML, click the link provided in this message.\n\n"
-                    "If you didn't request this, ignore this email."
-                )
-
-                # HTML body with clickable link (token included only in href, not displayed)
-                html_body = (
-                    f"<p>Hello {user.Fname},</p>"
-                    f"<p>To reset your password <a href=\"{reset_link}\">click here</a>.</p>"
-                    "<p>If you didn't request this, ignore this email.</p>"
-                )
-
-                msg = MIMEMultipart('alternative')
-                msg['Subject'] = subject
-                from_addr = os.environ.get('SMTP_FROM') or smtp_user or 'no-reply@example.com'
-                msg['From'] = from_addr
-                msg['To'] = user.email
-
-                part1 = MIMEText(text_body, 'plain')
-                part2 = MIMEText(html_body, 'html')
-                msg.attach(part1)
-                msg.attach(part2)
-
-                server = smtplib.SMTP(smtp_host, smtp_port, timeout=10)
-                if use_tls:
-                    server.starttls()
-                if smtp_user and smtp_pass:
-                    server.login(smtp_user, smtp_pass)
-
-                server.sendmail(from_addr, [user.email], msg.as_string())
-                server.quit()
-                email_sent = True
-            except Exception as e:
-                send_error = str(e)
-
-        # Log the reset request
-        LoggingService.log_action(
-            action=f"Password Reset Requested: {user.email}",
-            user_id=user.user_id
-        )
-
-        resp = {'message': 'If an account with that email exists, a reset email was sent'}
-        if not smtp_host or not email_sent:
-            # Do not return the reset token in responses (avoid exposing it).
-            if send_error:
-                resp['send_error'] = send_error
-
-        return jsonify(resp), 200
+        # Always return this exact message, whether the user was found or not
+        return jsonify({'message': 'If an account with that email exists, a reset email was sent'}), 200
 
     except Exception as e:
-        return jsonify({'error': 'Failed to initiate password reset: ' + str(e)}), 500
+        return jsonify({'error': f'Failed to initiate password reset: {str(e)}'}), 500
 
 
 @bp.route('/reset-password', methods=['POST'])

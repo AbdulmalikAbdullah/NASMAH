@@ -49,22 +49,4 @@ def create_app(config_class=Config):
     with app.app_context():
         db.create_all()
     
-    # Health check endpoint
-    @app.route('/health')
-    def health_check():
-        return {'status': 'healthy', 'service': 'Lung Cancer AI Backend'}, 200
-
-
-
-    """ This is do by (Abdulmalik) do not remove it this is for me to test the model predictions and API """ 
-
-    # try:
-    #     from flask import render_template
-
-    #     @app.route('/')
-    #     def index():
-    #         return render_template('index.html')
-    # except Exception:
-    #     pass
-    
     return app

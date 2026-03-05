@@ -1,7 +1,6 @@
 import os
 from datetime import timedelta
 
-
 class Config:
     """Base configuration"""
     
@@ -23,10 +22,6 @@ class Config:
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
     MAX_CONTENT_LENGTH = 500 * 1024 * 1024  # 500 MB max file size (allow batch zips)
     ALLOWED_EXTENSIONS = {'npy', 'png', 'jpg', 'jpeg', 'zip', 'dcm', 'dicom'}
-    
-    # AI "OLD" Model settings
-    # MODEL_PATH = os.path.join(BASE_DIR, 'models', 'unet_lung_segmentation.pth')
-    # MODEL_NAME = 'unet_lung_segmentation'
 
     # AI "NEW" Model settings
     MODEL_PATH = os.path.join(BASE_DIR, 'models', 'resnet34_lung_segmentation.pth')
@@ -46,18 +41,13 @@ class Config:
         os.makedirs(os.path.join(Config.BASE_DIR, 'instance'), exist_ok=True)
         os.makedirs(os.path.join(Config.BASE_DIR, 'models'), exist_ok=True)
 
-
 class DevelopmentConfig(Config):
     """Development configuration"""
     DEBUG = True
 
-
 class ProductionConfig(Config):
     """Production configuration"""
     DEBUG = False
-
-
-
 
 config = {
     'development': DevelopmentConfig,
