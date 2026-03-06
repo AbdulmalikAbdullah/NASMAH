@@ -13,6 +13,8 @@ import AdminLogs from './pages/AdminLogs';
 import AdminDashboard from './pages/AdminDashboard';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import LoadingSpinner from './components/common/LoadingSpinner';
+import Homepage from './pages/Homepage';
+
 
 /**
  * SmartRedirect Component
@@ -48,6 +50,7 @@ function App() {
         <div className="min-h-screen bg-gray-50">
           <Routes>
             {/* Public routes */}
+            <Route path="/" element={<Homepage />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/reset-password" element={<ResetPassword />} />
@@ -114,7 +117,7 @@ function App() {
             
             {/* Default redirect */}
             <Route path="/" element={<SmartRedirect />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
       </AuthProvider>

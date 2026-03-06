@@ -16,14 +16,30 @@ const Sidebar = () => {
   };
 
   const menuItems = [
+    // HomePage (accessible to all)
+    {
+      name: 'Home',
+      path: '/',
+      icon: (
+        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        </svg>
+      ),
+      roles: ['PATIENT', 'ADMIN']
+    },
     // Patient Dashboard
     {
       name: 'Dashboard',
       path: '/dashboard',
       icon: (
-        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        <svg className="w-6 h-6" x="0px" y="0px" viewBox="0 0 32 32">
+          <path d="M31,31.36H1c-0.199,0-0.36-0.161-0.36-0.36V1c0-0.199,0.161-0.36,0.36-0.36h30
+            c0.199,0,0.36,0.161,0.36,0.36v30C31.36,31.199,31.199,31.36,31,31.36z M1.36,30.64h29.28V12.36H1.36V30.64z M13.36,11.64h17.28
+            V1.36H13.36V11.64z M1.36,11.64h11.28V1.36H1.36V11.64z M9,27.36c-2.956,0-5.36-2.405-5.36-5.36h0.72c0,2.559,2.082,4.64,4.64,4.64
+            s4.64-2.081,4.64-4.64S11.559,17.36,9,17.36v-0.72c2.956,0,5.36,2.405,5.36,5.36S11.956,27.36,9,27.36z M27.36,27h-0.72V16h0.721
+            L27.36,27L27.36,27z M23.36,27h-0.72v-8h0.721L23.36,27L23.36,27z M19.36,27h-0.72v-3h0.721L19.36,27L19.36,27z" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor" strokeWidth="1" fill="none" />
         </svg>
+
       ),
       roles: ['PATIENT']
     },
@@ -32,8 +48,12 @@ const Sidebar = () => {
       name: 'Overview',
       path: '/admin/dashboard',
       icon: (
-        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        <svg className="w-6 h-6" x="0px" y="0px" viewBox="0 0 32 32">
+          <path d="M31,31.36H1c-0.199,0-0.36-0.161-0.36-0.36V1c0-0.199,0.161-0.36,0.36-0.36h30
+            c0.199,0,0.36,0.161,0.36,0.36v30C31.36,31.199,31.199,31.36,31,31.36z M1.36,30.64h29.28V12.36H1.36V30.64z M13.36,11.64h17.28
+            V1.36H13.36V11.64z M1.36,11.64h11.28V1.36H1.36V11.64z M9,27.36c-2.956,0-5.36-2.405-5.36-5.36h0.72c0,2.559,2.082,4.64,4.64,4.64
+            s4.64-2.081,4.64-4.64S11.559,17.36,9,17.36v-0.72c2.956,0,5.36,2.405,5.36,5.36S11.956,27.36,9,27.36z M27.36,27h-0.72V16h0.721
+            L27.36,27L27.36,27z M23.36,27h-0.72v-8h0.721L23.36,27L23.36,27z M19.36,27h-0.72v-3h0.721L19.36,27L19.36,27z" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor" strokeWidth="1" fill="none" />
         </svg>
       ),
       roles: ['ADMIN']
@@ -112,7 +132,9 @@ const Sidebar = () => {
         <div className="flex items-center space-x-3">
           <img className="h-16 w-auto" src="/NewLogo.png" alt="NASMAH Logo" />
           <div>
-            <h1 className="text-xl font-bold text-gray-900">NASMAH</h1>
+            <span className="text-xl font-bold text-gray-900" style={{ fontFamily: "'DM Serif Display', serif" }}>
+              NASMAH
+            </span>
             <p className="text-xs text-gray-500">{user?.role || 'System'}</p>
           </div>
         </div>
@@ -155,11 +177,10 @@ const Sidebar = () => {
             <Link
               key={item.path}
               to={item.path}
-              className={`flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-colors ${
-                isActive(item.path)
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-700 hover:bg-gray-100'
-              }`}
+              className={`flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-colors ${isActive(item.path)
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-700 hover:bg-gray-100'
+                }`}
             >
               <span className={isActive(item.path) ? 'text-white' : 'text-gray-500'}>
                 {item.icon}
