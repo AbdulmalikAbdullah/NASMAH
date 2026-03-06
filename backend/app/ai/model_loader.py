@@ -18,8 +18,11 @@ from scipy.spatial import ConvexHull
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 UPLOAD_FOLDER = 'uploads'
-MODEL_NAME = 'resnet34_lung_segmentation.pth'          # ← NEW model file name
+MODEL_NAME = 'resnet34_lung_segmentation.pth'
 ALLOWED_EXTENSIONS = {'npy', 'png', 'jpg', 'jpeg', 'zip', 'dcm', 'dicom'}
+
+# ── Supported slice extensions inside a ZIP ───────────────────────────────────
+SLICE_EXTENSIONS = {'.npy', '.png', '.jpg', '.jpeg', '.dcm', '.dicom'}
 
 # ── Locate the model file (searches upward from this file and CWD) ────────────
 MODEL_PATH = None
@@ -35,7 +38,6 @@ for _ in range(5):
         break
     base = os.path.dirname(base)
 
-# Also check the current package directory
 pkg_candidate = os.path.join(os.path.dirname(__file__), MODEL_NAME)
 if MODEL_PATH is None and os.path.exists(pkg_candidate):
     MODEL_PATH = pkg_candidate
@@ -46,16 +48,15 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = smp.Unet(
     encoder_name    = "resnet34",
-    encoder_weights = None,   # weights loaded from .pth, not downloaded
-    in_channels     = 1,      # grayscale CT slices
-    classes         = 1,      # binary tumour mask
-    activation      = None,   # raw logits — sigmoid applied at inference
+    encoder_weights = None,
+    in_channels     = 1,
+    classes         = 1,
+    activation      = None,
 ).to(device)
 
 if MODEL_PATH and os.path.exists(MODEL_PATH):
     try:
         state = torch.load(MODEL_PATH, map_location=device)
-        # Support both plain state_dict and checkpoint dicts
         if isinstance(state, dict) and "model" in state:
             state = state["model"]
         model.load_state_dict(state)
@@ -81,29 +82,57 @@ def preprocess_image(img_array):
 
 
 def load_image_file(filepath):
-    """Load image from .npy or standard image formats → float32 numpy array."""
-    ext = filepath.rsplit('.', 1)[1].lower()
-    if ext == 'npy':
+    """
+    Load image from .npy, .dcm/.dicom, or standard image formats
+    → float32 numpy array (2-D grayscale).
+    """
+    ext = os.path.splitext(filepath)[1].lower()
+
+    if ext == '.npy':
         img = np.load(filepath).astype(np.float32)
+
+    elif ext in ('.dcm', '.dicom'):
+        try:
+            import pydicom
+        except ImportError:
+            raise ImportError(
+                "pydicom is required to load DICOM files. "
+                "Install it with: pip install pydicom"
+            )
+        ds = pydicom.dcmread(filepath)
+        img = ds.pixel_array.astype(np.float32)
+
+        # Apply rescale slope/intercept if present (converts to HU)
+        slope     = float(getattr(ds, 'RescaleSlope',     1))
+        intercept = float(getattr(ds, 'RescaleIntercept', 0))
+        img = img * slope + intercept
+
+        # If multi-frame take the middle frame
+        if img.ndim == 3:
+            img = img[img.shape[0] // 2]
+
     else:
+        # PNG / JPG / JPEG / etc.
         pil_img = Image.open(filepath).convert('L')
         img = np.array(pil_img).astype(np.float32)
+
+    # Ensure 2-D
+    if img.ndim > 2:
+        img = img[..., 0]
+
     return img
 
 
 def inference_single_slice(mdl, img_array, dev):
     """
     Run inference on a single 2-D CT slice.
-
-    The ResNet34-UNet accepts input of shape (1, 1, H, W).
     Minimum spatial size is 32×32 — images smaller than this are padded
     and then cropped back to the original size after inference.
     """
     mdl.eval()
-    img_norm   = preprocess_image(img_array)
-    h, w       = img_norm.shape[:2]
+    img_norm = preprocess_image(img_array)
+    h, w     = img_norm.shape[:2]
 
-    # Pad to at least 32×32 (ResNet encoder requirement)
     pad_h = max(0, 32 - h)
     pad_w = max(0, 32 - w)
     if pad_h or pad_w:
@@ -112,12 +141,11 @@ def inference_single_slice(mdl, img_array, dev):
     img_tensor = torch.tensor(img_norm).unsqueeze(0).unsqueeze(0).to(dev)
 
     with torch.no_grad():
-        logits     = mdl(img_tensor)
-        pred       = torch.sigmoid(logits)
-        pred_mask  = (pred > 0.5).float().cpu().numpy()[0, 0]
+        logits    = mdl(img_tensor)
+        pred      = torch.sigmoid(logits)
+        pred_mask = (pred > 0.5).float().cpu().numpy()[0, 0]
         confidence = pred.cpu().numpy()[0, 0]
 
-    # Crop back to original size if we padded
     pred_mask  = pred_mask[:h, :w]
     confidence = confidence[:h, :w]
 
@@ -129,11 +157,10 @@ def calculate_metrics_for_slice(pred_mask, confidence, img_shape):
     Calculate tumour metrics for a single slice using RECIST-style longest
     diameter measured across the convex-hull of the predicted mask.
     """
-    binary_mask = (pred_mask > 0.5).astype(np.uint8)
+    binary_mask  = (pred_mask > 0.5).astype(np.uint8)
     tumor_pixels = int(np.sum(binary_mask))
     total_pixels = int(binary_mask.size)
 
-    # ===== Confidence =====
     if tumor_pixels > 0:
         try:
             confidence_rate = float(np.mean(confidence[binary_mask > 0]))
@@ -144,17 +171,14 @@ def calculate_metrics_for_slice(pred_mask, confidence, img_shape):
 
     pixel_spacing = 0.5  # mm
 
-    # ===== RECIST Longest Diameter (convex-hull based) =====
     def _recist_longest(mask_2d, spacing_mm=0.5):
         coords = np.argwhere(mask_2d > 0)
         if len(coords) < 2:
             return 0.0, None, None, 0
-
         try:
             pts = coords[ConvexHull(coords).vertices]
         except Exception:
             pts = coords
-
         best_d = 0.0
         pa, pb = pts[0], pts[1]
         for i in range(len(pts)):
@@ -162,12 +186,10 @@ def calculate_metrics_for_slice(pred_mask, confidence, img_shape):
                 d = float(np.linalg.norm(pts[i] - pts[j]))
                 if d > best_d:
                     best_d, pa, pb = d, pts[i], pts[j]
-
         return best_d * spacing_mm, tuple(int(x) for x in pa), tuple(int(x) for x in pb), int(mask_2d.sum())
 
     diameter_mm, point_a, point_b, tumor_area_px = _recist_longest(binary_mask, pixel_spacing)
 
-    # ===== Stage Classification Based on DIAMETER =====
     if diameter_mm <= 0:
         stage_num, stage_label = None, 'Unknown'
     elif diameter_mm < 10:
@@ -180,18 +202,19 @@ def calculate_metrics_for_slice(pred_mask, confidence, img_shape):
         stage_num, stage_label = 3, 'Stage III (T ≥ 70 mm)'
 
     return {
-        'tumor_pixels': tumor_pixels,
-        'total_pixels': total_pixels,
-        'has_tumor': bool(tumor_pixels > 0),
-        'confidence_rate': confidence_rate,
-        'tumor_size_mm': round(diameter_mm, 2),
-        'tumor_diameter_cm': round(diameter_mm / 10, 2),
-        'tumor_stage': stage_num,
-        'tumor_stage_label': stage_label,
-        'tumor_area_px': tumor_area_px,
-        'recist_point_a': point_a,
-        'recist_point_b': point_b,
+        'tumor_pixels'      : tumor_pixels,
+        'total_pixels'      : total_pixels,
+        'has_tumor'         : bool(tumor_pixels > 0),
+        'confidence_rate'   : confidence_rate,
+        'tumor_size_mm'     : round(diameter_mm, 2),
+        'tumor_diameter_cm' : round(diameter_mm / 10, 2),
+        'tumor_stage'       : stage_num,
+        'tumor_stage_label' : stage_label,
+        'tumor_area_px'     : tumor_area_px,
+        'recist_point_a'    : point_a,
+        'recist_point_b'    : point_b,
     }
+
 
 def process_multiple_slices(slice_files_dict, dev, top_k=10):
     """Process multiple CT slices and return the top-K most affected slices."""
@@ -203,9 +226,9 @@ def process_multiple_slices(slice_files_dict, dev, top_k=10):
 
     for idx, (filename, filepath) in enumerate(slice_files_dict.items()):
         try:
-            img_array        = load_image_file(filepath)
-            pred_mask, conf  = inference_single_slice(model, img_array, dev)
-            metrics          = calculate_metrics_for_slice(pred_mask, conf, img_array.shape)
+            img_array       = load_image_file(filepath)
+            pred_mask, conf = inference_single_slice(model, img_array, dev)
+            metrics         = calculate_metrics_for_slice(pred_mask, conf, img_array.shape)
 
             all_results.append({
                 'slice_index': idx,
@@ -254,22 +277,19 @@ def create_batch_visualization(top_slices):
 
         axes[idx, 1].imshow(img, cmap='bone')
         axes[idx, 1].imshow(np.ma.masked_where(pred_mask == 0, pred_mask), alpha=0.5, cmap='autumn')
-        # Overlay RECIST measurement if available
         recist_pa = metrics.get('recist_point_a')
         recist_pb = metrics.get('recist_point_b')
         meas_text = f"Tumour: {metrics['tumor_pixels']} px\n{metrics['tumor_size_mm']:.1f} mm"
         axes[idx, 1].set_title(meas_text, fontsize=12)
         if recist_pa and recist_pb:
-            # plot line and endpoints (note: points are (y,x))
             axes[idx, 1].plot([recist_pa[1], recist_pb[1]], [recist_pa[0], recist_pb[0]],
                               color='cyan', linewidth=2.5)
             for pt, lbl in [(recist_pa, 'A'), (recist_pb, 'B')]:
                 axes[idx, 1].scatter(pt[1], pt[0], s=60, color='#ffeb3b', edgecolors='white', linewidths=0.8)
                 axes[idx, 1].text(pt[1] + 3, pt[0] - 3, lbl, color='#ffeb3b', fontsize=12, fontweight='bold')
-            # Zoom into the tumour region so A/B are clear
             try:
                 rows, cols = np.where(pred_mask > 0)
-                m = 20
+                m  = 20
                 x0 = max(cols.min() - m, 0)
                 x1 = min(cols.max() + m, pred_mask.shape[1])
                 y0 = min(rows.max() + m, pred_mask.shape[0])
@@ -295,19 +315,42 @@ def create_batch_visualization(top_slices):
 
 
 def extract_zip(zip_path, extract_to):
-    """Extract a zip file and return a sorted dict of {filename: filepath} for .npy files."""
+    """
+    Extract a zip file and return a sorted dict of {filename: filepath}
+    for all supported slice formats: .npy, .dcm, .dicom, .png, .jpg, .jpeg
+    Skips macOS metadata files (.__MACOSX, .DS_Store) and hidden files.
+    """
     with zipfile.ZipFile(zip_path, 'r') as zf:
         zf.extractall(extract_to)
 
-    npy_files = {}
-    for root, _, files in os.walk(extract_to):
+    slice_files = {}
+    for root, dirs, files in os.walk(extract_to):
+        # Skip macOS metadata directories
+        dirs[:] = [d for d in dirs if d != '__MACOSX']
+
         for f in files:
-            if f.endswith('.npy'):
-                npy_files[f] = os.path.join(root, f)
+            # Skip hidden / metadata files
+            if f.startswith('.') or f.startswith('__'):
+                continue
 
+            ext = os.path.splitext(f)[1].lower()
+            if ext in SLICE_EXTENSIONS:
+                slice_files[f] = os.path.join(root, f)
+
+    if not slice_files:
+        print(f"⚠ No supported slice files found in zip. "
+              f"Supported extensions: {SLICE_EXTENSIONS}")
+        return {}
+
+    # Sort numerically if filenames are numeric (e.g. 001.dcm, 002.dcm)
     try:
-        npy_files = dict(sorted(npy_files.items(), key=lambda x: int(x[0].split('.')[0])))
-    except Exception:
-        npy_files = dict(sorted(npy_files.items()))
+        slice_files = dict(
+            sorted(slice_files.items(),
+                   key=lambda x: int(os.path.splitext(x[0])[0]))
+        )
+    except (ValueError, TypeError):
+        slice_files = dict(sorted(slice_files.items()))
 
-    return npy_files
+    print(f"✓ Found {len(slice_files)} slice files in zip "
+          f"(extensions: {set(os.path.splitext(f)[1].lower() for f in slice_files)})")
+    return slice_files
