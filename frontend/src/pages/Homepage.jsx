@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Button from '../components/common/Button';
+import { useAuth } from '../context/AuthContext';
 
 /* ─── Google Font injection ───────────────────────────────────── */
 const FontInjector = () => {
@@ -151,6 +152,7 @@ function useCounter(target, duration = 1800, active = false) {
 /* ─── Main ────────────────────────────────────────────────────── */
 export default function Homepage() {
     const navigate = useNavigate();
+    const { isAuthenticated } = useAuth();
     const [scrolled, setScrolled] = useState(false);
     const [statsOn, setStatsOn] = useState(false);
     const statsRef = useRef(null);
@@ -231,12 +233,20 @@ export default function Homepage() {
 
                     {/* CTA */}
                     <div className="flex items-center gap-3">
-                        <Link to="/login">
-                            <Button variant="outline" className="text-sm px-4 py-1.5">Sign In</Button>
-                        </Link>
-                        <Link to="/register">
-                            <Button variant="primary" className="text-sm px-4 py-1.5">Get Started</Button>
-                        </Link>
+                        {isAuthenticated() ? (
+                            <Link to="/dashboard">
+                                <Button variant="primary" className="text-sm px-4 py-1.5">Dashboard</Button>
+                            </Link>
+                        ) : (
+                            <>
+                                <Link to="/login">
+                                    <Button variant="outline" className="text-sm px-4 py-1.5">Sign In</Button>
+                                </Link>
+                                <Link to="/register">
+                                    <Button variant="primary" className="text-sm px-4 py-1.5">Get Started</Button>
+                                </Link>
+                            </>
+                        )}
                     </div>
                 </div>
             </nav>
@@ -272,11 +282,19 @@ export default function Homepage() {
                         </p>
 
                         <div className="anim-fadeup3 flex flex-wrap gap-3 mb-10">
-                            <Link to="/register">
-                                <Button variant="primary" className="px-7 py-3 text-base">
-                                    Get Started Free →
-                                </Button>
-                            </Link>
+                            {isAuthenticated() ? (
+                                <Link to="/dashboard">
+                                    <Button variant="primary" className="px-7 py-3 text-base">
+                                        Go to Dashboard →
+                                    </Button>
+                                </Link>
+                            ) : (
+                                <Link to="/register">
+                                    <Button variant="primary" className="px-7 py-3 text-base">
+                                        Get Started Free →
+                                    </Button>
+                                </Link>
+                            )}
                             <a href="#how-it-works">
                                 <Button variant="outline" className="px-7 py-3 text-base">
                                     See How It Works
@@ -542,16 +560,26 @@ export default function Homepage() {
                         Join NASMAH and bring the power of AI-assisted diagnostics to your clinical workflow. Free to start.
                     </p>
                     <div className="flex justify-center gap-3 flex-wrap">
-                        <Link to="/register">
-                            <Button variant="primary" className="px-8 py-3 text-base">
-                                Create Free Account →
-                            </Button>
-                        </Link>
-                        <Link to="/login">
-                            <Button variant="secondary" className="px-8 py-3 text-base">
-                                Sign In
-                            </Button>
-                        </Link>
+                        {isAuthenticated() ? (
+                            <Link to="/dashboard">
+                                <Button variant="primary" className="px-8 py-3 text-base">
+                                    Go to Dashboard →
+                                </Button>
+                            </Link>
+                        ) : (
+                            <>
+                                <Link to="/register">
+                                    <Button variant="primary" className="px-8 py-3 text-base">
+                                        Create Free Account →
+                                    </Button>
+                                </Link>
+                                <Link to="/login">
+                                    <Button variant="secondary" className="px-8 py-3 text-base">
+                                        Sign In
+                                    </Button>
+                                </Link>
+                            </>
+                        )}
                     </div>
                 </div>
             </section>
