@@ -18,6 +18,7 @@ Flask-CORS==4.0.0
 # Image processing
 Pillow==10.1.0
 pydicom==2.4.4
+opencv-python==4.8.1.78
 numpy==1.26.2
 
 # AI/ML

@@ -15,6 +15,7 @@ import segmentation_models_pytorch as smp
 import matplotlib.lines as mlines
 import matplotlib.patches as mpatches
 from scipy.spatial import ConvexHull
+from app.utils.preprocessing import WebCTPreprocessor
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 UPLOAD_FOLDER = 'uploads'
@@ -81,6 +82,46 @@ def preprocess_image(img_array):
     return (img_array - img_array.min()) / (img_array.max() - img_array.min() + 1e-8)
 
 
+def preprocess_dicom_file(filepath):
+    """
+    Preprocess DICOM file using WebCTPreprocessor.
+    Returns: 4D float32 array [1, 1, 256, 256] ready for model inference
+    """
+    is_valid, error_msg = WebCTPreprocessor.validate_dicom(filepath)
+    if not is_valid:
+        raise ValueError(f"Invalid DICOM file: {error_msg}")
+    
+    return WebCTPreprocessor.preprocess_for_model(filepath)
+
+
+def preprocess_file_unified(filepath):
+    """
+    Unified preprocessing function that uses WebCTPreprocessor for DICOM files
+    and standard loading for other formats.
+    Returns: 4D array [1, 1, H, W] ready for inference
+    """
+    ext = os.path.splitext(filepath)[1].lower()
+    
+    if ext in ('.dcm', '.dicom'):
+        # Use WebCTPreprocessor for DICOM files
+        return preprocess_dicom_file(filepath)
+    else:
+        # Use standard loading for other formats
+        img = load_image_file(filepath)  # Returns 2D array
+        img_norm = preprocess_image(img)
+        
+        # Handle padding for minimum size requirement
+        h, w = img_norm.shape[:2]
+        pad_h = max(0, 32 - h)
+        pad_w = max(0, 32 - w)
+        if pad_h or pad_w:
+            img_norm = np.pad(img_norm, ((0, pad_h), (0, pad_w)), mode='reflect')
+        
+        # Add batch and channel dimensions
+        img_tensor = np.expand_dims(np.expand_dims(img_norm, 0), 0)
+        return img_tensor.astype(np.float32)
+
+
 def load_image_file(filepath):
     """
     Load image from .npy, .dcm/.dicom, or standard image formats
@@ -123,32 +164,25 @@ def load_image_file(filepath):
     return img
 
 
-def inference_single_slice(mdl, img_array, dev):
+def inference_preprocessed_slice(mdl, img_tensor_4d, dev):
     """
-    Run inference on a single 2-D CT slice.
-    Minimum spatial size is 32×32 — images smaller than this are padded
-    and then cropped back to the original size after inference.
+    Run inference on a preprocessed 4D image tensor [1, 1, H, W].
+    Works with already-preprocessed arrays from WebCTPreprocessor.
     """
     mdl.eval()
-    img_norm = preprocess_image(img_array)
-    h, w     = img_norm.shape[:2]
-
-    pad_h = max(0, 32 - h)
-    pad_w = max(0, 32 - w)
-    if pad_h or pad_w:
-        img_norm = np.pad(img_norm, ((0, pad_h), (0, pad_w)), mode='reflect')
-
-    img_tensor = torch.tensor(img_norm).unsqueeze(0).unsqueeze(0).to(dev)
-
+    
+    # Convert to torch tensor and move to device
+    if not isinstance(img_tensor_4d, torch.Tensor):
+        img_tensor_4d = torch.tensor(img_tensor_4d, dtype=torch.float32)
+    
+    img_tensor = img_tensor_4d.to(dev)
+    
     with torch.no_grad():
         logits    = mdl(img_tensor)
         pred      = torch.sigmoid(logits)
         pred_mask = (pred > 0.5).float().cpu().numpy()[0, 0]
         confidence = pred.cpu().numpy()[0, 0]
-
-    pred_mask  = pred_mask[:h, :w]
-    confidence = confidence[:h, :w]
-
+    
     return pred_mask, confidence
 
 
@@ -217,7 +251,7 @@ def calculate_metrics_for_slice(pred_mask, confidence, img_shape):
 
 
 def process_multiple_slices(slice_files_dict, dev, top_k=10):
-    """Process multiple CT slices and return the top-K most affected slices."""
+    """Process multiple CT slices using unified preprocessing and return the top-K most affected slices."""
     all_results = []
 
     print(f"\n{'='*50}")
@@ -226,9 +260,13 @@ def process_multiple_slices(slice_files_dict, dev, top_k=10):
 
     for idx, (filename, filepath) in enumerate(slice_files_dict.items()):
         try:
-            img_array       = load_image_file(filepath)
-            pred_mask, conf = inference_single_slice(model, img_array, dev)
-            metrics         = calculate_metrics_for_slice(pred_mask, conf, img_array.shape)
+            # Use unified preprocessing for all file types including DICOM
+            img_tensor_4d   = preprocess_file_unified(filepath)
+            pred_mask, conf = inference_preprocessed_slice(model, img_tensor_4d, dev)
+            
+            # Load original image for visualization
+            img_array = load_image_file(filepath)
+            metrics = calculate_metrics_for_slice(pred_mask, conf, img_array.shape)
 
             all_results.append({
                 'slice_index': idx,

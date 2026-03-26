@@ -589,14 +589,14 @@ export default function Homepage() {
                 <div className="max-w-6xl mx-auto px-6">
                     <div className="flex items-center justify-center gap-2 mb-3">
                         <img src="/New_Logo_noBG.png" alt="NASMAH" className="h-12 w-auto opacity-80" />
-                        <span className="text-white font-semibold" style={{ fontFamily: "'DM Serif Display', serif" }}>NASMAH</span>
+                        <span className="text-gray-300 font-semibold" style={{ fontFamily: "'DM Serif Display', serif" }}>NASMAH</span>
                         <img src="/CCIS_Logo.png" alt="CCIS Logo" className="h-12 w-auto opacity-80"/>
-                        <span className="text-white font-semibold" style={{ fontFamily: "'DM Serif Display', serif" }}>College of Computer and Information Sciences</span>
+                        <span className="text-gray-300 font-semibold" style={{ fontFamily: "'DM Serif Display', serif" }}>College of Computer and Information Sciences</span>
                         <img src="/ImamU_logo.png" alt="Imam U Logo" className="h-12 w-auto opacity-80"/>
-                        <span className="text-white font-semibold" style={{ fontFamily: "'Lora', serif" }}>Al-Imam Mohammad Ibn Saud Islamic University</span>
+                        <span className="text-gray-300 font-semibold" style={{ fontFamily: "'DM Serif Display', serif" }}>Al-Imam Mohammad Ibn Saud Islamic University</span>
                     </div>
                     <p className="text-sm mb-1">AI-Powered Lung Cancer Detection System</p>
-                    <p className="text-xs opacity-50">
+                    <p className="text-xs opacity-80">
                         Not a substitute for professional medical diagnosis. © 2026 NASMAH Team & CCIS.
                     </p>
                 </div>

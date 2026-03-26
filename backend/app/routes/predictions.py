@@ -8,8 +8,9 @@ import json
 from app.ai.model_loader import (
     model,
     device,
-    inference_single_slice,
+    inference_preprocessed_slice,
     load_image_file,
+    preprocess_file_unified,
     calculate_metrics_for_slice,
     process_multiple_slices,
     extract_zip,
@@ -119,10 +120,13 @@ def predict():
                 except Exception:
                     pass
 
-    # Single file handling
+    # Single file handling with unified preprocessing
     try:
+        img_tensor_4d = preprocess_file_unified(filepath)
+        pred_mask, confidence = inference_preprocessed_slice(model, img_tensor_4d, device)
+        
+        # Load original for visualization purposes
         img_array = load_image_file(filepath)
-        pred_mask, confidence = inference_single_slice(model, img_array, device)
         metrics = calculate_metrics_for_slice(pred_mask, confidence, img_array.shape)
 
         # Optionally create visualization for single slice
@@ -309,9 +313,12 @@ def predict_from_image_id(current_user):
                     except Exception:
                         pass
         
-        # Single file handling (npy, png, jpg, jpeg)
+        # Single file handling (npy, png, jpg, jpeg, dcm, dicom) with unified preprocessing
+        img_tensor_4d = preprocess_file_unified(filepath)
+        pred_mask, confidence_map = inference_preprocessed_slice(model, img_tensor_4d, device)
+        
+        # Load original for visualization purposes
         img_array = load_image_file(filepath)
-        pred_mask, confidence_map = inference_single_slice(model, img_array, device)
         metrics = calculate_metrics_for_slice(pred_mask, confidence_map, img_array.shape)
         
         # Create visualization
