@@ -120,9 +120,6 @@ cd frontend
 # Install dependencies
 npm install
 
-# Configure API endpoint (if needed)
-# Update src/api/axiosConfig.js with your backend URL
-
 # Run development server
 npm run dev
 
@@ -175,29 +172,6 @@ The frontend will be available at `http://localhost:5173`
 - **Database Queries**: Optimized with indexing
 - **Frontend Bundle Size**: ~150KB gzipped
 
-## 🐛 Troubleshooting
-
-### Common Issues
-
-**Backend won't start**
-```bash
-# Clear Python cache
-find . -type d -name __pycache__ -exec rm -r {} +
-# Reinstall dependencies
-pip install --force-reinstall -r requirements.txt
-```
-
-**Frontend build errors**
-```bash
-# Clear node_modules and reinstall
-rm -rf node_modules package-lock.json
-npm install
-```
-
-**CUDA not detected**
-- Ensure NVIDIA drivers are installed
-- Verify CUDA 11.8+ is installed
-- PyTorch will fall back to CPU automatically
 
 ## 📝 Environment Variables
 
