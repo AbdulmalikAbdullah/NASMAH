@@ -378,7 +378,7 @@
                         <th>Rank</th>
                         <th>Slice Index</th>
                         <th>Filename</th>
-                        <th>Tumor Size (mm²)</th>
+                        <th>Tumor Size (mm)</th>
                         <th>Tumor Pixels</th>
                         <th>Stage</th>
                         <th>Confidence</th>
@@ -534,7 +534,7 @@
                 (metrics.confidence_rate * 100).toFixed(1) + '%';
 
             document.getElementById('tumorSize').textContent =
-                metrics.tumor_size_mm + ' mm²';
+                metrics.tumor_size_mm + ' mm';
 
             const vizContainer = document.getElementById('singleVisualization');
             vizContainer.innerHTML = `<img src="data:image/png;base64,${data.visualization}" alt="Segmentation Results">`;
@@ -550,7 +550,7 @@
             // Update summary
             document.getElementById('totalSlices').textContent = summary.total_slices;
             document.getElementById('tumorSlicesCount').textContent = summary.tumor_slices;
-            document.getElementById('maxTumorSize').textContent = summary.max_tumor_size + ' mm²';
+            document.getElementById('maxTumorSize').textContent = summary.max_tumor_size + ' mm';
             document.getElementById('avgConfidence').textContent = (summary.avg_confidence * 100).toFixed(1) + '%';
             document.getElementById('topSlice').textContent =
                 `#${summary.top_slice_index} (${summary.top_slice_filename})`;
@@ -565,7 +565,7 @@
                     <td><strong>${index + 1}</strong></td>
                     <td>${result.slice_index}</td>
                     <td>${result.filename}</td>
-                    <td>${result.tumor_size_mm} mm²</td>
+                    <td>${result.tumor_size_mm} mm</td>
                     <td>${result.tumor_pixels.toLocaleString()}</td>
                     <td>${result.stage_label || 'Unknown'}</td>
                     <td>${(result.confidence_rate * 100).toFixed(1)}%</td>

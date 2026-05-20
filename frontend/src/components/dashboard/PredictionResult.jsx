@@ -119,7 +119,7 @@ const PredictionResult = ({ prediction }) => {
               {metrics.tumor_size_mm !== undefined && (
                 <div className="bg-gray-50 p-3 rounded">
                   <p className="text-xs text-gray-500">Tumor Size</p>
-                  <p className="text-lg font-bold text-gray-900">{metrics.tumor_size_mm.toFixed(2)} mm²</p>
+                  <p className="text-lg font-bold text-gray-900">{metrics.tumor_size_mm.toFixed(2)} mm</p>
                 </div>
               )}
               {metrics.tumor_pixels !== undefined && (
@@ -153,7 +153,7 @@ const PredictionResult = ({ prediction }) => {
               </div>
               <div className="bg-orange-50 p-3 rounded">
                 <p className="text-xs text-orange-600">Max Tumor Size</p>
-                <p className="text-lg font-bold text-orange-900">{summary.max_tumor_size?.toFixed(2)} mm²</p>
+                <p className="text-lg font-bold text-orange-900">{summary.max_tumor_size?.toFixed(2)} mm</p>
               </div>
               <div className="bg-green-50 p-3 rounded">
                 <p className="text-xs text-green-600">Avg Confidence</p>
@@ -191,7 +191,7 @@ const PredictionResult = ({ prediction }) => {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Slice</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Size (mm²)</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Size (mm)</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Stage</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Confidence</th>
                   </tr>
